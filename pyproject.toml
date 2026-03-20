@@ -12,18 +12,29 @@ authors = [
   { name = "Mythic" }
 ]
 dependencies = [
-  "pyyaml>=6.0"
+  "pyyaml>=6.0",
+  "requests>=2.31.0",
+  "PyQt6>=6.6.0",
+  "pytesseract>=0.3.10",
+  "pdf2image>=1.16.3",
+  "Pillow>=10.0.0",
+  "numpy>=1.24.0"
 ]
 
 [project.scripts]
 com-importer = "com_importer.main:main"
+com-importer-gui = "com_importer.gui_main:main"
 
 [project.optional-dependencies]
 dev = [
   "mypy>=1.11",
   "pre-commit>=3.8",
   "pytest>=8.0",
-  "ruff>=0.6"
+  "ruff>=0.6",
+  "pytest-qt>=4.2.0"
+]
+vision = [
+  "google-cloud-vision>=3.4.0"
 ]
 
 [tool.pytest.ini_options]
