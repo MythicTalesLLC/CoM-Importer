@@ -9,4 +9,5 @@ class ImportConfig:
     input_path: Path
     output_path: Path
     input_format: str | None = None
+    schema_name: str = "com"
     strict: bool = False

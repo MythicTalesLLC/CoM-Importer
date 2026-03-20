@@ -19,6 +19,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional explicit input format",
     )
     parser.add_argument(
+        "--schema",
+        dest="schema_name",
+        choices=["com"],
+        default="com",
+        help="Schema profile used for field mapping and validation",
+    )
+    parser.add_argument(
         "--strict",
         action="store_true",
         help="Fail if any record is empty after normalization",
@@ -34,12 +41,14 @@ def main(argv: list[str] | None = None) -> int:
         input_path=args.input,
         output_path=args.output,
         input_format=args.input_format,
+        schema_name=args.schema_name,
         strict=args.strict,
     )
     result = run_import(config)
     summary = (
         f"Imported {result.input_count} records -> "
-        f"{result.output_count} written to {result.output_path}"
+        f"{result.output_count} written ({result.rejected_count} rejected) "
+        f"to {result.output_path}"
     )
     print(summary)
     return 0
