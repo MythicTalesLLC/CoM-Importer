@@ -19,16 +19,5 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-python# CoM_Importer
-
-A Python project scaffold for importing and processing s/
-A Python proImp
-## Quick Start
-
-```bash
-python3 -m venv .venv
-source .venv/binkag
-```bash
-pyth_ =pythonn"source .venv/bin/act/mpip install -e .[dev]
-py/Cpytest
-python -m comimpythor/```
+pythonpath = ["src"]
+testpaths = ["tests"]
