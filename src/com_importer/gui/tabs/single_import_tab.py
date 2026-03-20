@@ -60,6 +60,10 @@ class SingleImportTab(QWidget):
         parse_button.clicked.connect(self._parse_input)
         button_layout.addWidget(parse_button)
 
+        edit_button = QPushButton("Edit")
+        edit_button.clicked.connect(self._edit_actor)
+        button_layout.addWidget(edit_button)
+
         preview_button = QPushButton("Preview JSON")
         preview_button.clicked.connect(self._show_preview)
         button_layout.addWidget(preview_button)
@@ -327,6 +331,19 @@ class SingleImportTab(QWidget):
             self.current_actor_type = self.actor_type
         except ParsingError as e:
             QMessageBox.critical(self, "Parsing Error", f"Failed to parse: {e}")
+
+    def _edit_actor(self) -> None:
+        """Edit the parsed actor."""
+        if not hasattr(self, "current_actor") or not self.current_actor:
+            QMessageBox.warning(self, "No Import Parsed", "Please parse text first.")
+            return
+
+        from ..dialogs import EditActorDialog
+
+        dialog = EditActorDialog(self.current_actor, self)
+        if dialog.exec():
+            self.current_actor = dialog.get_actor()
+            QMessageBox.information(self, "Changes Saved", "Actor updated successfully!")
 
     def _show_preview(self) -> None:
         """Show JSON preview of parsed actor."""
