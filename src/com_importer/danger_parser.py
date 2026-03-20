@@ -152,15 +152,6 @@ class DangerParser:
         lines = text.split("\n")
         description_lines = []
         in_description = False
-        skip_keywords = {
-            "mythos",
-            "logos",
-            "rating",
-            "spectrum",
-            "move",
-            "tag",
-            "status",
-        }
 
         for line in lines:
             stripped = line.strip().lower()
@@ -169,19 +160,24 @@ class DangerParser:
             if not in_description and not line.strip():
                 continue
 
-            # Skip lines that are section headers
-            if stripped and any(kw in stripped for kw in skip_keywords):
+            # Skip section header keywords (keyword at start like "Keyword:")
+            if stripped and re.match(
+                r"^(mythos|logos|rating|spectrum|move|tag|status)[:\s]", stripped
+            ):
                 if in_description:
                     break
                 continue
 
-            # Skip if it looks like a title/first line
-            if not in_description and len(line.strip()) < 100:
+            # If we haven't started description yet, the first non-empty, non-header line starts it
+            if not in_description and line.strip():
                 in_description = True
-                continue
 
             if in_description:
                 description_lines.append(line)
+
+        # Remove leading empty lines from description
+        while description_lines and not description_lines[0].strip():
+            description_lines.pop(0)
 
         return "\n".join(description_lines).strip()
 
