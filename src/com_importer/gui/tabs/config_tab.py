@@ -22,7 +22,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from ...foundry_client import FoundryClientError, FoundryClientFactory
+from ...foundry_client import FoundryClientFactory
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +31,7 @@ class ConfigurationTab(QWidget):
     """Tab for configuring Foundry connection and OCR settings."""
 
     settings_changed = pyqtSignal()
+    client_created = pyqtSignal(object)  # Emits the Foundry client
 
     def __init__(self):
         """Initialize the configuration tab."""
@@ -219,9 +220,11 @@ class ConfigurationTab(QWidget):
             success, message = client.test_connection()
             if success:
                 QMessageBox.information(self, "Connection Successful", message)
+                # Emit the successfully created client
+                self.client_created.emit(client)
             else:
                 QMessageBox.warning(self, "Connection Failed", message)
-        except FoundryClientError as e:
+        except Exception as e:
             QMessageBox.critical(self, "Connection Error", str(e))
 
     def _reset_defaults(self) -> None:

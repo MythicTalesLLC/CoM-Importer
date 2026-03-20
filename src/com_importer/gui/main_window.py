@@ -73,6 +73,9 @@ class ComImporterWindow(QMainWindow):
         self.history_tab = HistoryTab()
         self.tabs.addTab(self.history_tab, "History")
 
+        # Wire up connections
+        self._connect_tabs()
+
     def _create_menu_bar(self) -> None:
         """Create the menu bar."""
         menubar = self.menuBar()
@@ -97,6 +100,28 @@ class ComImporterWindow(QMainWindow):
         # This will load user's saved Foundry connection, OCR settings, etc.
         # For now, just a placeholder
         logger.info("Loading application settings...")
+
+    def _connect_tabs(self) -> None:
+        """Connect signals between tabs."""
+        # When config changes, update single import with the Foundry client
+        self.config_tab.client_created.connect(self._on_foundry_client_created)
+
+    def _on_foundry_client_created(self, client) -> None:
+        """Handle Foundry client creation from config tab."""
+        # Give the client to single import tab
+        self.single_import_tab.set_foundry_client(client)
+
+        # Give the client to batch import tab
+        self.batch_import_tab.set_foundry_client(client)
+
+        # Pass OCR configuration to single import tab
+        config = self.config_tab.get_config()
+        self.single_import_tab._ocr_method = config.get("ocr_method", "auto")
+        self.single_import_tab._tesseract_path = config.get("tesseract_path")
+        self.single_import_tab._vision_api_key = config.get("vision_api_key")
+
+        # Set up history callback so both tabs can save to history
+        self.single_import_tab.set_history_callback(self.history_tab.add_entry_from_creation)
 
     def _show_preferences(self) -> None:
         """Show preferences dialog."""
