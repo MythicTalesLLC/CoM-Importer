@@ -4,7 +4,12 @@ import pytest
 
 from com_importer.config import ImportConfig
 from com_importer.pipeline import run_import
-from com_importer.schema import map_to_com_schema, validate_com_record
+from com_importer.schema import (
+    load_schema_definition,
+    map_to_com_schema,
+    map_to_schema,
+    validate_com_record,
+)
 from com_importer.transform import normalize_record
 
 
@@ -82,3 +87,61 @@ def test_strict_mode_raises_on_missing_required_fields(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="validation failure"):
         run_import(config)
+
+
+def test_load_schema_definition_from_json(tmp_path) -> None:
+    field_map = tmp_path / "field_map.json"
+    field_map.write_text(
+        json.dumps(
+            {
+                "aliases": {
+                    "person_id": ["staff_id"],
+                    "first_name": ["given"],
+                    "last_name": ["surname"],
+                },
+                "required_fields": ["person_id", "first_name", "last_name"],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    schema = load_schema_definition(field_map)
+    mapped = map_to_schema({"staff_id": "7", "given": "Lin", "surname": "Torvalds"}, schema)
+
+    assert mapped == {"person_id": "7", "first_name": "Lin", "last_name": "Torvalds"}
+
+
+def test_run_import_with_custom_field_map(tmp_path) -> None:
+    source = tmp_path / "staff.csv"
+    source.write_text("Staff ID,Given,Surname\n7,Lin,Torvalds\n", encoding="utf-8")
+
+    field_map = tmp_path / "field_map.json"
+    field_map.write_text(
+        json.dumps(
+            {
+                "aliases": {
+                    "person_id": ["staff_id"],
+                    "first_name": ["given"],
+                    "last_name": ["surname"],
+                },
+                "required_fields": ["person_id", "first_name", "last_name"],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    target = tmp_path / "normalized.jsonl"
+    result = run_import(
+        ImportConfig(
+            input_path=source,
+            output_path=target,
+            input_format="csv",
+            field_map_path=field_map,
+        )
+    )
+
+    assert result.output_count == 1
+    payload = json.loads(target.read_text(encoding="utf-8").strip())
+    assert payload["person_id"] == "7"
+    assert payload["first_name"] == "Lin"
+    assert payload["last_name"] == "Torvalds"

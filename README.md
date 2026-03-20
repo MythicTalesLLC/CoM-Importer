@@ -18,8 +18,16 @@ com-importer --help
 com-importer \
 	--input sample.csv \
 	--output normalized.jsonl \
-	--format csv
+	--format csv \
+	--field-map config/com_field_map.json
 ```
+
+## Field Mapping
+
+Use an external mapping file to adapt different source systems without changing
+code. Supported formats: JSON, YAML.
+
+Example file: config/com_field_map.json
 
 ## Dev Workflow
 

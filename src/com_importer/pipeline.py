@@ -6,7 +6,12 @@ from typing import Any
 
 from .config import ImportConfig
 from .fileio import load_records, write_jsonl
-from .schema import map_to_com_schema, validate_com_record
+from .schema import (
+    default_schema_definition,
+    load_schema_definition,
+    map_to_schema,
+    validate_record,
+)
 from .transform import normalize_record
 
 Record = dict[str, Any]
@@ -26,6 +31,12 @@ def run_import(config: ImportConfig) -> ImportResult:
     if config.schema_name != "com":
         raise ValueError(f"Unsupported schema profile: {config.schema_name}")
 
+    schema = (
+        load_schema_definition(config.field_map_path)
+        if config.field_map_path is not None
+        else default_schema_definition()
+    )
+
     accepted_records: list[Record] = []
     rejected_count = 0
 
@@ -37,8 +48,8 @@ def run_import(config: ImportConfig) -> ImportResult:
                 raise ValueError("Strict mode is enabled and one or more records became empty")
             continue
 
-        mapped = map_to_com_schema(normalized)
-        validation = validate_com_record(mapped)
+        mapped = map_to_schema(normalized, schema)
+        validation = validate_record(mapped, schema.required_fields)
         if validation.errors:
             rejected_count += 1
             if config.strict:

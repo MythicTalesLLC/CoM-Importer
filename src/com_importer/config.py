@@ -10,4 +10,5 @@ class ImportConfig:
     output_path: Path
     input_format: str | None = None
     schema_name: str = "com"
+    field_map_path: Path | None = None
     strict: bool = False

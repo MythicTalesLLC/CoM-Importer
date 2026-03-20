@@ -26,6 +26,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Schema profile used for field mapping and validation",
     )
     parser.add_argument(
+        "--field-map",
+        dest="field_map_path",
+        type=Path,
+        default=None,
+        help="Path to JSON/YAML field-map config for schema aliases and required fields",
+    )
+    parser.add_argument(
         "--strict",
         action="store_true",
         help="Fail if any record is empty after normalization",
@@ -42,6 +49,7 @@ def main(argv: list[str] | None = None) -> int:
         output_path=args.output,
         input_format=args.input_format,
         schema_name=args.schema_name,
+        field_map_path=args.field_map_path,
         strict=args.strict,
     )
     result = run_import(config)

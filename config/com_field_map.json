@@ -1,0 +1,42 @@
+{
+    "aliases": {
+        "person_id": [
+            "person_id",
+            "id",
+            "member_id",
+            "employee_id"
+        ],
+        "first_name": [
+            "first_name",
+            "firstname",
+            "given_name",
+            "first"
+        ],
+        "last_name": [
+            "last_name",
+            "lastname",
+            "family_name",
+            "last"
+        ],
+        "email": [
+            "email",
+            "email_address",
+            "work_email"
+        ],
+        "department": [
+            "department",
+            "dept",
+            "team"
+        ],
+        "start_date": [
+            "start_date",
+            "hire_date",
+            "start"
+        ]
+    },
+    "required_fields": [
+        "person_id",
+        "first_name",
+        "last_name"
+    ]
+}
