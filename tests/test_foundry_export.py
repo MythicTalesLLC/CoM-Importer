@@ -116,7 +116,8 @@ def test_macro_script_generation():
     macro = FoundryJsonExporter.create_import_script()
 
     assert "importActorFromJson" in macro
-    assert "FilePicker" in macro
+    assert "Dialog" in macro  # Changed to Dialog-based approach
+    assert "JSON.parse" in macro  # Parse JSON content
     assert "Actor.create" in macro
     assert "createEmbeddedDocuments" in macro
     print(f"✓ Macro script generated ({len(macro)} chars)")

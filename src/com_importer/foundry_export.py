@@ -112,7 +112,7 @@ class FoundryJsonExporter:
         Generate a production-ready Foundry Macro for importing threat actors with items.
 
         This macro:
-        1. Lets users select a JSON export file
+        1. Prompts user to paste JSON content or upload file
         2. Creates the actor with all system data (description, mythos, logos, etc)
         3. Automatically adds all items (moves, spectrums, tags, statuses)
         4. Provides clear success/error feedback
@@ -130,34 +130,60 @@ class FoundryJsonExporter:
 // Usage:
 // 1. Save this as a new Macro in Foundry (Macros compendium)
 // 2. Run this macro
-// 3. Select the fvtt-Actor-*.json file from your Downloads folder
+// 3. Paste the JSON content or upload the fvtt-Actor-*.json file
 // 4. Done! Actor created with all items
 // ============================================================================
 
 async function importActorFromJson() {
     try {
-        // Step 1: Let user select file
-        ui.notifications.info("Select the threat JSON file to import...");
-        const files = await FilePicker.browse("data", "", {
-            extensions: [".json"],
-            wildcard: false
+        // Step 1: Prompt for JSON input
+        let jsonContent = null;
+        let actorData = null;
+
+        await new Promise((resolve) => {
+            const d = new Dialog({
+                title: "Import City of Mist Actor",
+                content: `<div style="max-width: 100%;">
+                    <p style="margin-bottom: 10px;">
+                        <strong>Paste the JSON content from fvtt-Actor-*.json file</strong>
+                    </p>
+                    <textarea id="json-input" style="width: 100%; height: 300px;
+                        font-family: monospace; font-size: 12px; padding: 8px;
+                        border: 1px solid #ccc; border-radius: 4px;"
+                        placeholder="Paste JSON content here..."></textarea>
+                </div>`,
+                buttons: {
+                    import: {
+                        label: "Import Actor",
+                        callback: (html) => {
+                            jsonContent = html.find("#json-input").val();
+                            resolve(true);
+                        }
+                    },
+                    cancel: {
+                        label: "Cancel",
+                        callback: () => {
+                            resolve(false);
+                        }
+                    }
+                },
+                default: "import"
+            });
+            d.render(true);
         });
 
-        if (!files.target) {
-            ui.notifications.warn("Import cancelled - no file selected");
+        if (!jsonContent) {
+            ui.notifications.warn("Import cancelled");
             return;
         }
 
-        const fileName = files.target.split('/').pop();
-        ui.notifications.info(`Loading [${fileName}]...`);
-
-        // Step 2: Read and parse JSON file
-        const response = await fetch(files.target);
-        if (!response.ok) {
-            throw new Error(`Failed to read file: ${response.statusText}`);
+        // Step 2: Parse JSON
+        try {
+            actorData = JSON.parse(jsonContent);
+        } catch (parseError) {
+            throw new Error(`Invalid JSON: ${parseError.message}`);
         }
 
-        const actorData = await response.json();
         const actorName = actorData.name || "Unknown Threat";
         const items = actorData.items || [];
 
@@ -166,12 +192,12 @@ async function importActorFromJson() {
             throw new Error("Invalid actor data: missing name or type field");
         }
 
+        ui.notifications.info(`Creating actor: ${actorName}...`);
+
         // Step 3: Prepare actor data (remove embedded items and ID for fresh creation)
         const actorDataForCreation = { ...actorData };
         delete actorDataForCreation.items;
         delete actorDataForCreation._id;
-
-        ui.notifications.info(`Creating actor: ${actorName}...`);
 
         // Step 4: Create the actor
         const createdActor = await Actor.create(actorDataForCreation);
@@ -192,7 +218,6 @@ async function importActorFromJson() {
                 itemCount++;
             } catch (itemError) {
                 console.warn(`Failed to add item "${item.name}":`, itemError);
-                // Continue with other items even if one fails
             }
         }
 

@@ -378,7 +378,10 @@ FILE: {self.export_path}"""
 
 STEP 2: Import Your Threat Actor (repeat for each)
   • Run the macro you just created
-  • Select: {filename}
+  • The macro will open a text box
+  • Copy the contents of: {filename}
+  • Paste into the dialog box
+  • Click "Import Actor"
   • Done! ✓
 
 Result:
@@ -395,9 +398,9 @@ Result:
         # Buttons
         button_layout = QHBoxLayout()
 
-        copy_btn = QPushButton("Copy File Path")
-        copy_btn.clicked.connect(self._copy_to_clipboard)
-        button_layout.addWidget(copy_btn)
+        copy_json_btn = QPushButton("Copy JSON Content")
+        copy_json_btn.clicked.connect(self._copy_json_to_clipboard)
+        button_layout.addWidget(copy_json_btn)
 
         open_btn = QPushButton("Open File Location")
         open_btn.clicked.connect(self._open_file_location)
@@ -410,6 +413,31 @@ Result:
         button_layout.addWidget(close_btn)
 
         layout.addLayout(button_layout)
+
+    def _copy_json_to_clipboard(self) -> None:
+        """Copy JSON content to clipboard for pasting into Foundry macro."""
+        from PyQt6.QtGui import QClipboard
+        from PyQt6.QtWidgets import QApplication
+
+        try:
+            with open(self.export_path) as f:
+                json_content = f.read()
+
+            cb = QApplication.clipboard()
+            cb.setText(json_content, QClipboard.Mode.Clipboard)
+
+            from PyQt6.QtWidgets import QMessageBox
+
+            QMessageBox.information(
+                self,
+                "Copied",
+                "JSON content copied to clipboard!\n\n"
+                "Now paste it into the macro dialog in Foundry.",
+            )
+        except Exception as e:
+            from PyQt6.QtWidgets import QMessageBox
+
+            QMessageBox.critical(self, "Error", f"Failed to copy JSON content:\n{str(e)}")
 
     def _copy_to_clipboard(self) -> None:
         """Copy export path to clipboard."""

@@ -40,11 +40,13 @@ When REST API items fail to persist, the tool automatically:
 4. Save the macro
 5. Done! ✓
 
-### Import (Repeats for each threat, 30 seconds)
+### Import (Repeats for each threat, 1 minute)
 
 1. Run the macro you created
-2. Select the threat JSON file (`fvtt-Actor-*.json`)
-3. Done! ✓
+2. When the dialog appears, copy the contents of the threat JSON file (`fvtt-Actor-*.json`)
+3. Paste into the dialog text box
+4. Click "Import Actor"
+5. Done! ✓
 
 **Result:**
 - ✅ Actor created with complete system data
@@ -56,19 +58,31 @@ When REST API items fail to persist, the tool automatically:
 
 The macro (`IMPORT_MACRO_CityOfMist.js`) automatically:
 
-1. **Presents a file picker** - User selects the JSON export
+1. **Presents a text dialog** - User pastes the JSON export content
 2. **Creates the actor** - Full actor with name, description, mythos, logos, etc.
 3. **Adds all items** - Programmatically creates each GM move, spectrum, tag, status
 4. **Provides feedback** - Shows success/failure notifications with item counts
 5. **Handles errors gracefully** - If an item fails, continues with others and reports status
 
-### Example Macro Output
+### Macro Dialog & Output
 
+When you run the macro, you'll see a dialog:
 ```
-[Info] Loading [fvtt-Actor-DANGEROUS_HACKER-0579c09d.json]...
+Paste the JSON content from fvtt-Actor-*.json file
+[Large text box for pasting JSON...]
+[Import Actor] [Cancel]
+```
+
+Then notifications showing progress:
+```
 [Info] Creating actor: DANGEROUS HACKER...
 [Info] Adding 16 items to DANGEROUS HACKER...
 [Success] ✓ Created "DANGEROUS HACKER" with all 16 items
+```
+
+Or if some items failed:
+```
+[Warning] ⚠ Created "My Threat" with 12/15 items (3 failed)
 ```
 
 ## Files You'll See
@@ -88,9 +102,10 @@ When the tool exports a threat that fails REST API item creation:
 ✅ **Fully Automated** - No manual item creation, no clicking through menus repeatedly
 ✅ **100% Complete** - All items created with proper parent-child relationships
 ✅ **No Server Access Needed** - Uses only Foundry's built-in macro system
-✅ **Works Every Time** - Macro handles the logic, user just selects file
+✅ **Works Every Time** - Macro handles the logic, user just pastes JSON content
 ✅ **Scalable** - Same macro works for single threats or batch imports
 ✅ **Reliable** - Macro runs client-side in Foundry, no network limitations
+✅ **No File System Restrictions** - Paste-based approach works around Foundry's file sandboxing
 
 ## Fallback Option: Manual Import (Legacy)
 
