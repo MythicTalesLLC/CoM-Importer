@@ -30,6 +30,7 @@ class BatchImportResult:
     status: str = "pending"  # pending, parsing, creating, success, failed
     error_message: str | None = None
     actor_json: dict[str, Any] | None = None
+    export_path: str | None = None  # Path if exported as JSON fallback
 
     @property
     def danger_name(self) -> str | None:
@@ -45,6 +46,7 @@ class BatchImportReport:
     total_succeeded: int = 0
     total_failed: int = 0
     results: list[BatchImportResult] = field(default_factory=list)
+    exported_actors: dict[str, str] = field(default_factory=dict)  # Maps actor name to export path
 
     @property
     def success_rate(self) -> float:
@@ -55,13 +57,17 @@ class BatchImportReport:
 
     def summary(self) -> str:
         """Get summary text."""
-        return (
+        summary = (
             f"Batch Import Summary:\n"
             f"Total: {self.total_attempted} | "
             f"Success: {self.total_succeeded} | "
             f"Failed: {self.total_failed} | "
             f"Success Rate: {self.success_rate:.1f}%"
         )
+        if self.exported_actors:
+            summary += f"\n\nExported to JSON: {len(self.exported_actors)} actors"
+            summary += "\n(Check ~/Downloads for fvtt-Actor-*.json files to import)"
+        return summary
 
 
 class BatchImportManager:
@@ -170,6 +176,17 @@ class BatchImportManager:
             result.actor_id = actor_id
             result.status = "success"
 
+            # Check if export fallback occurred
+            if (
+                hasattr(self.foundry_client, "last_export_path")
+                and self.foundry_client.last_export_path
+            ):
+                result.export_path = self.foundry_client.last_export_path
+                self.report.exported_actors[actor.name] = self.foundry_client.last_export_path
+                # Clear the export tracker
+                self.foundry_client.last_export_path = None
+                self.foundry_client.last_export_items_count = 0
+
             logger.info(f"Successfully imported {actor_label}: {actor.name} (ID: {actor_id})")
             return result
 
@@ -190,6 +207,36 @@ class BatchImportManager:
         # Note: Foundry client doesn't have delete method yet, so this is a placeholder
         # In practice, manual deletion in Foundry may be needed
         # Future enhancement: add delete_actor() to FoundryClient
+
+    def export_batch_jsonl(self) -> str | None:
+        """
+        Export all actors with items that failed to persist as JSONL.
+
+        This is useful after batch import when some actors had REST API failures
+        and were exported individually. This combines them into one file.
+
+        Returns:
+            Path to exported JSONL file, or None if no exports needed
+        """
+        from .foundry_export import FoundryJsonExporter
+
+        if not self.report.exported_actors:
+            logger.info("No actors to export - all items persisted successfully")
+            return None
+
+        # Collect all actor JSON from the results
+        actors_to_export = []
+        for result in self.report.results:
+            if result.export_path and result.actor_json:
+                actors_to_export.append(result.actor_json)
+
+        if not actors_to_export:
+            logger.info("No actor JSON data to export")
+            return None
+
+        export_path = FoundryJsonExporter.export_batch_to_jsonl(actors_to_export)
+        logger.info(f"Exported {len(actors_to_export)} actors to {export_path}")
+        return export_path
 
 
 class BatchImportParser:
