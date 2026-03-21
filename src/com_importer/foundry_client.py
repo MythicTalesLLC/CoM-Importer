@@ -114,9 +114,9 @@ class FoundryRestClient(FoundryClient):
         Raises:
             Exception: If creation fails
         """
-        endpoint = urljoin(self.api_url, "/create")
+        endpoint = urljoin(self.api_url, f"/create?clientId={self.client_id}")
         payload = {
-            "clientId": self.client_id,
+            "entityType": "Actor",
             "collection": "actors",
             "data": actor_data,
         }
@@ -139,9 +139,9 @@ class FoundryRestClient(FoundryClient):
         Raises:
             Exception: If update fails
         """
-        endpoint = urljoin(self.api_url, "/update")
+        endpoint = urljoin(self.api_url, f"/update?clientId={self.client_id}")
         payload = {
-            "clientId": self.client_id,
+            "entityType": "Actor",
             "collection": "actors",
             "_id": actor_id,
             "data": actor_data,
@@ -163,9 +163,9 @@ class FoundryRestClient(FoundryClient):
         Raises:
             Exception: If addition fails
         """
-        endpoint = urljoin(self.api_url, "/create")
+        endpoint = urljoin(self.api_url, f"/create?clientId={self.client_id}")
         payload = {
-            "clientId": self.client_id,
+            "entityType": "Item",
             "collection": "items",
             "data": {**item_data, "parent": actor_id},
         }
