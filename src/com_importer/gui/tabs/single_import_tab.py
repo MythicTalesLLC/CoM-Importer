@@ -336,9 +336,6 @@ class SingleImportTab(QWidget):
             # Populate text field
             self.text_input.setPlainText(text)
 
-            # Auto-detect actor type from extracted text
-            self._auto_detect_actor_type()
-
             QMessageBox.information(
                 self,
                 "OCR Complete",
