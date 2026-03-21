@@ -124,19 +124,28 @@ class FoundryRestClient(FoundryClient):
 
         logger.info(f"create_actor() called for: {actor_data.get('name')}")
 
-        # Build actor data for creation - WITHOUT items first
+        # Build actor data for creation - send ONLY minimal fields to REST API
         create_actor_data = {
             "name": actor_data.get("name", "New Actor"),
             "type": actor_data.get("type", "threat"),
+            "img": actor_data.get("img", "icons/svg/mystery-man.svg"),
         }
 
-        # Add img if present
-        if actor_data.get("img"):
-            create_actor_data["img"] = actor_data["img"]
-
-        # Add system fields (description, mythos, logos, etc.)
+        # Send system fields but stripped to only what REST API supports
         if actor_data.get("system"):
-            create_actor_data["system"] = actor_data["system"]
+            system = actor_data["system"]
+            # REST API might only support specific system fields
+            create_actor_data["system"] = {
+                "description": system.get("description", ""),
+                "biography": system.get("biography", ""),
+                "gmnotes": system.get("gmnotes", ""),
+                "mythos": system.get("mythos", ""),
+                "logos": system.get("logos", ""),
+                "alias": system.get("alias", "?????"),
+                "useAlias": system.get("useAlias", True),
+                "locked": system.get("locked", False),
+                "version": system.get("version", "3.0.0"),
+            }
 
         endpoint = urljoin(self.api_url, f"/create?clientId={self.client_id}")
         payload = {
@@ -145,7 +154,7 @@ class FoundryRestClient(FoundryClient):
             "data": create_actor_data,
         }
         logger.debug(f"Posting to {endpoint}")
-        print("[TRACE] Creating actor WITHOUT items first")
+        print("[TRACE] Creating actor (embedded items NOT supported by REST API)")
         response = self.session.post(endpoint, json=payload, timeout=30)
         print(f"[TRACE] Actor creation response: {response.status_code}")
         if response.status_code not in (200, 201):
@@ -160,10 +169,10 @@ class FoundryRestClient(FoundryClient):
         print(f"[TRACE] Actor created with ID: {actor_id}")
         logger.info(f"Actor created with ID: {actor_id}")
 
-        # Now add items separately
+        # Now attempt to add items separately
         if actor_id and actor_data.get("items"):
             items = actor_data.get("items", [])
-            print(f"[TRACE] Starting to add {len(items)} items to actor {actor_id}")
+            print(f"[TRACE] Attempting to add {len(items)} items to actor {actor_id}")
             logger.info(f"Adding {len(items)} items to actor {actor_id}")
             for i, item_data in enumerate(items):
                 try:
