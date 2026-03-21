@@ -31,10 +31,16 @@ dev = [
   "pre-commit>=3.8",
   "pytest>=8.0",
   "ruff>=0.6",
-  "pytest-qt>=4.2.0"
+  "pytest-qt>=4.2.0",
+  "pyinstaller>=6.0.0"
 ]
 vision = [
   "google-cloud-vision>=3.4.0"
+]
+build = [
+  "pyinstaller>=6.0.0",
+  "wheel>=0.41.0",
+  "build>=1.0.0"
 ]
 
 [tool.pytest.ini_options]

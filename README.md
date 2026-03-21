@@ -38,7 +38,16 @@ A powerful GUI tool for converting text, images, and PDFs from City of Mist rule
 
 ### Installation
 
-#### macOS
+#### Option 1: Standalone Application (Recommended)
+Coming soon! Phase 6 will provide:
+- **macOS**: CoM-Importer.app (drag-and-drop installation)
+- **Windows**: CoM-Importer.exe (installer)
+
+These standalone binaries don't require Python installation.
+
+#### Option 2: Development Installation
+
+##### macOS
 ```bash
 # Clone the repository
 git clone https://github.com/MythicTalesLLC/CoM-Importer.git
@@ -54,7 +63,7 @@ pip install -e .
 python -m com_importer.gui_main
 ```
 
-#### Linux/Windows
+##### Linux/Windows
 ```bash
 git clone https://github.com/MythicTalesLLC/CoM-Importer.git
 cd CoM-Importer
@@ -336,17 +345,32 @@ Mythos: [Hunter]
 
 ## 🚫 Known Limitations & Future Work
 
-### Current Status: ✅ Fully Functional (Phase 5)
+### Current Status: ✅ Fully Functional with Phase 6 Packaging Underway
 - ✅ Phases 1-4: All core features complete
 - ✅ Phase 5: Comprehensive testing (51 tests passing)
-- ⏳ Phase 6: PyInstaller packaging for standalone binaries (pending)
+- 🔄 Phase 6: PyInstaller packaging for standalone binaries (in progress)
 
-### Phase 6: Planned Packaging
-When ready, Phase 6 will:
-1. Create PyInstaller build configurations for Mac (.app) and Windows (.exe)
-2. Set up code signing for distribution
-3. Generate standalone executables for distribution
-4. Create installation packages (DMG for Mac, MSI for Windows)
+### Phase 6: Building Standalone Binaries
+
+**Build Configuration**:
+- PyInstaller spec files for Mac and Windows
+- Cross-platform build scripts
+- GitHub Actions CI/CD workflow
+
+**To Build Locally**:
+```bash
+# Install build dependencies
+pip install -e ".[build]"
+
+# Build for your platform (auto-detected)
+bash scripts/build.sh
+
+# Or build specifically
+bash scripts/build_mac.sh    # Creates dist/CoM-Importer.app
+bash scripts/build_windows.sh # Creates dist/com-importer.exe
+```
+
+See [PHASE6_PACKAGING.md](PHASE6_PACKAGING.md) for detailed build instructions, code signing, distribution, and CI/CD setup.
 
 ### Known Limitations
 - OCR accuracy depends on image quality (try 200+ DPI for best results)
@@ -355,10 +379,11 @@ When ready, Phase 6 will:
 - Some special characters may not OCR perfectly
 
 ### Future Enhancements
+- Automated build releases on GitHub Actions
+- Code signing and notarization for distribution
 - Support for additional Foundry modules and systems
 - Template-based import for custom formats
 - Collaboration features for team imports
-- Automatic bracket syntax for common tags
 
 ## 🤝 Contributing
 
@@ -407,21 +432,26 @@ This project is licensed under the MIT License — see LICENSE file for details.
 
 ## 🎯 Roadmap
 
-### Recent Completions (This Session)
-- ✅ Character parser implementation with full integration
-- ✅ Edit dialog for reviewing parsed data before creation
-- ✅ Tab integration and signal wiring
-- ✅ OCR with Tesseract and Cloud Vision
-- ✅ History tracking with SQLite persistence
-- ✅ 51 comprehensive tests (all passing)
+### Recent Completions (Latest Session)
+- ✅ Fixed item creation via REST API (removed auto-generated _id field issue)
+- ✅ Implemented actor type auto-detection (threat vs character detection from OCR)
+- ✅ Integrated auto-detection into GUI with manual override option
+- ✅ Improved detection for multiple threat stat formats (FOOL/SCARE vs GET INTO TROUBLE/HURT OR SUBDUE)
 
-### Next Priority
-- **Phase 6**: PyInstaller packaging for Mac .app and Windows .exe standalone binaries
-- Code signing for distribution
-- Automated build pipelines
+### Current Work: Phase 6 - Packaging & Distribution
+- PyInstaller configuration for Mac (.app) and Windows (.exe)
+- Build scripts for automated compilation
+- GitHub Actions CI/CD workflow for automated releases
+- Documentation for code signing and distribution
+
+### Next Steps
+1. Test builds on both macOS and Windows platforms
+2. Set up code signing certificates for distribution
+3. Automate release workflow on GitHub Actions
+4. Create distribution packages (DMG for Mac, MSI/Installer for Windows)
 
 ---
 
-**Status**: Production-ready for development use. Phase 6 (standalone packaging) pending.
+**Status**: Production-ready with phase 6 packaging infrastructure in place.
 
 **Last Updated**: March 2026 | **Tests Passing**: 51/51 ✅
