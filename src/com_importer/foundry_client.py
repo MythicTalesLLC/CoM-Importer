@@ -106,7 +106,8 @@ class FoundryRestClient(FoundryClient):
         Create a new actor in Foundry via REST API.
 
         For REST API, we simplify the actor data to just essential fields
-        to avoid serialization issues with the relay.
+        to avoid serialization issues with the relay, then update with
+        additional fields after creation.
 
         Args:
             actor_data: Foundry actor object
@@ -142,7 +143,29 @@ class FoundryRestClient(FoundryClient):
         result = response.json()
         # REST API returns entity nested within response
         entity = result.get("entity", {})
-        return entity.get("_id", result.get("_id", result.get("id", "")))
+        actor_id = entity.get("_id", result.get("_id", result.get("id", "")))
+
+        # Now update with additional details
+        if actor_id:
+            update_data = {}
+
+            # Add system field updates
+            if actor_data.get("system"):
+                update_data["system"] = actor_data["system"]
+
+            # Add items if present
+            if actor_data.get("items"):
+                update_data["items"] = actor_data["items"]
+
+            # Only update if we have additional data
+            if update_data:
+                try:
+                    self.update_actor(actor_id, update_data)
+                except Exception:
+                    # Log update error but don't fail - actor was created
+                    pass
+
+        return actor_id
 
     def update_actor(self, actor_id: str, actor_data: dict[str, Any]) -> None:
         """
