@@ -361,7 +361,7 @@ FILE: {self.export_path}"""
         layout.addWidget(explanation)
 
         # Next steps
-        steps_label = QLabel("IMPORT INTO FOUNDRY (3 Steps):")
+        steps_label = QLabel("IMPORT INTO FOUNDRY (2 Steps via Macro):")
         steps_label.setStyleSheet("font-weight: bold; margin-top: 15px;")
         layout.addWidget(steps_label)
 
@@ -369,20 +369,25 @@ FILE: {self.export_path}"""
         steps.setReadOnly(True)
         filename = self.export_path.split("/")[-1]
         steps.setPlainText(
-            f"""1. Open your Foundry instance
-2. Navigate to the Actors sidebar
-3. Click "Import Actors" button
-4. Select: {filename}
-5. Click Import
-   → All items will be created with proper relationships
+            f"""STEP 1: Set up the Import Macro (one-time)
+  • Open your Foundry instance
+  • Go to Macros → New Macro
+  • Paste the contents of: IMPORT_MACRO_CityOfMist.js (in Downloads)
+  • Save the macro (name: "Import City of Mist Actor")
+  • Close the macro editor
 
-Once imported, refresh your browser and check the actor sheet. You'll see:
-  • All GM moves listed
-  • All spectrums with correct tiers
-  • All tags and statuses properly linked"""
+STEP 2: Import Your Threat Actor (repeat for each)
+  • Run the macro you just created
+  • Select: {filename}
+  • Done! ✓
+
+Result:
+  ✓ Actor created
+  ✓ All {self.items_count} items added (moves, spectrums, tags)
+  ✓ Full relationships intact"""
         )
         steps.setStyleSheet(
-            "background-color: #fff3e0; padding: 10px; border: 1px solid #ffb74d;"
+            "background-color: #e3f2fd; padding: 10px; border: 1px solid #2196f3;"
             " border-radius: 4px;"
         )
         layout.addWidget(steps)

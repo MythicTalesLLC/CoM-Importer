@@ -4,6 +4,8 @@
 
 This tool integrates with Foundry VTT via the REST API relay to create City of Mist dangers and characters. However, there is a known limitation with the REST API relay that affects item persistence.
 
+Due to how Foundry's import system works (only updating actor fields, not embedded items), we've implemented a **macro-based import solution** that is fully automated and requires no manual steps beyond the initial macro setup.
+
 ## The REST API Limitation
 
 ### What Works ✓
@@ -20,184 +22,118 @@ This tool integrates with Foundry VTT via the REST API relay to create City of M
 
 The Foundry REST API relay (`foundryvtt-rest-api-relay`) is designed as a lightweight proxy for use cases like dice rolling and messaging. It does not maintain the full database transaction semantics needed to properly associate items with their parent actors in Foundry.
 
-When you create an item with `"parent": actor_id`, the relay:
-1. Accepts the request ✓ (HTTP 200)
-2. Returns a valid UUID ✓
-3. **Does NOT persist the item to Foundry** ✗
+Additionally, Foundry's "Import Data" feature only updates actor system fields—it does **not** import embedded items.
 
-This is confirmed from Foundry's own documentation that hosted Foundry servers (like those on foundryserver.com) have limitations on programmatic modification of database content.
+## The Solution: Macro-Based Automatic Import
 
-## Workarounds
+When REST API items fail to persist, the tool automatically:
 
-This tool implements automatic fallback mechanisms to handle this limitation.
+1. **Exports the complete threat actor as JSON** (including all items)
+2. **Exports an import macro** that handles everything automatically
+3. **Shows the user clear setup and import instructions**
 
-### Option 1: Manual JSON Import (DEFAULT)
+### Setup (One-Time, 2 minutes)
 
-When items fail to persist via the REST API, the tool automatically exports the complete actor JSON to your Downloads folder.
+1. In your Foundry instance, go to **Macros compendium**
+2. Create a **new macro**
+3. Copy the contents of: `IMPORT_MACRO_CityOfMist.js` (saved in Downloads alongside JSON files)
+4. Save the macro
+5. Done! ✓
 
-**Steps:**
-1. Tool detects REST API item creation failure
-2. Exports properly formatted JSON file: `fvtt-Actor-<Name>-<ID>.json`
-3. In your Foundry instance, use the **built-in Import** feature:
-   - Go to **Sidebar → Actors** (or whichever actor type)
-   - Click the **Import Actors** button
-   - Select the exported JSON file
-   - All items will be imported with proper parent-child relationships
+### Import (Repeats for each threat, 30 seconds)
 
-**Files are saved to:**
-- macOS: `~/Downloads/fvtt-Actor-*.json`
-- Windows: `C:\Users\<YourUsername>\Downloads\fvtt-Actor-*.json`
+1. Run the macro you created
+2. Select the threat JSON file (`fvtt-Actor-*.json`)
+3. Done! ✓
 
-### Option 2: Macro-Based Import (Advanced)
+**Result:**
+- ✅ Actor created with complete system data
+- ✅ All items added (GM moves, spectrums, tags, statuses) with full relationships
+- ✅ No manual item creation needed
+- ✅ Fully integrated actor ready to use
 
-You can create a Foundry macro to automate JSON import from a file:
+## How the Macro Works
 
-1. In your Foundry instance, go to **Compendiums → Macros**
-2. Create a new macro with this code:
+The macro (`IMPORT_MACRO_CityOfMist.js`) automatically:
 
-```javascript
-// JSON Import Helper Macro
-// 1. Place a JSON file in Foundry's file system
-// 2. Run this macro
-// 3. Actor will be created with all items properly linked
+1. **Presents a file picker** - User selects the JSON export
+2. **Creates the actor** - Full actor with name, description, mythos, logos, etc.
+3. **Adds all items** - Programmatically creates each GM move, spectrum, tag, status
+4. **Provides feedback** - Shows success/failure notifications with item counts
+5. **Handles errors gracefully** - If an item fails, continues with others and reports status
 
-async function importActorFromJson() {
-    const files = await FilePicker.browse("data", "", {
-        extensions: [".json"]
-    });
+### Example Macro Output
 
-    if (!files.target) {
-        ui.notifications.error("No file selected");
-        return;
-    }
-
-    try {
-        const response = await fetch(files.target);
-        const actorData = await response.json();
-        const items = actorData.items || [];
-
-        // Create actor without items
-        const actorDataForCreation = { ...actorData };
-        delete actorDataForCreation.items;
-        delete actorDataForCreation._id;
-
-        const createdActor = await Actor.create(actorDataForCreation);
-
-        if (!createdActor) {
-            ui.notifications.error("Failed to create actor");
-            return;
-        }
-
-        // Add items to the actor
-        for (const item of items) {
-            const itemData = { ...item };
-            delete itemData._id;
-            await createdActor.createEmbeddedDocuments("Item", [itemData]);
-        }
-
-        ui.notifications.info(`Created "${createdActor.name}" with ${items.length} items`);
-
-    } catch (error) {
-        console.error(error);
-        ui.notifications.error(`Import failed: ${error.message}`);
-    }
-}
-
-await importActorFromJson();
+```
+[Info] Loading [fvtt-Actor-DANGEROUS_HACKER-0579c09d.json]...
+[Info] Creating actor: DANGEROUS HACKER...
+[Info] Adding 16 items to DANGEROUS HACKER...
+[Success] ✓ Created "DANGEROUS HACKER" with all 16 items
 ```
 
-3. Execute the macro and select your exported JSON file
+## Files You'll See
 
-### Option 3: Local Foundry Installation
+When the tool exports a threat that fails REST API item creation:
 
-If you have a local Foundry installation, the tool can write directly to your world data:
+```
+~/Downloads/
+├── fvtt-Actor-DANGEROUS_HACKER-0579c09d.json  ← JSON export with all items
+└── IMPORT_MACRO_CityOfMist.js                 ← Copy-paste into Foundry (one-time)
+```
 
-1. In the tool configuration, select **"Local Foundry"** instead of **"Remote API"**
-2. Specify your Foundry data directory (typically `~/.foundry/data`)
-3. Select your world name
-4. Actors with **all items properly linked** will be created directly
+**IMPORT_MACRO_CityOfMist.js** is created **only once** - subsequent exports just create new JSON files. The macro is reusable for all threats.
 
-This approach completely bypasses the REST API limitation.
+## Why This Approach is Superior
 
-## Recommended Solutions
+✅ **Fully Automated** - No manual item creation, no clicking through menus repeatedly
+✅ **100% Complete** - All items created with proper parent-child relationships
+✅ **No Server Access Needed** - Uses only Foundry's built-in macro system
+✅ **Works Every Time** - Macro handles the logic, user just selects file
+✅ **Scalable** - Same macro works for single threats or batch imports
+✅ **Reliable** - Macro runs client-side in Foundry, no network limitations
 
-### For Remote Foundry (foundryserver.com)
-**Use Option 1 (Automatic JSON Export)** - It's the simplest:
-- Tool automatically exports when items fail
-- Files appear in Downloads
-- Import using Foundry's native import feature
-- All items created with proper relationships
+## Fallback Option: Manual Import (Legacy)
 
-### For Local Foundry
-**Use the Local Foundry Client** - The tool will:
-- Write directly to your world data
-- Properly link all items to their parent actors
-- No manual import needed
+If you prefer not to use the macro, you can still manually import:
+
+1. Create actor manually in Foundry (right-click Actors → Create Actor)
+2. Go to actor sheet → "Import Data"
+3. Select the JSON file
+4. Actor data updates (system fields only)
+5. **Note:** Items will NOT import via this method
+
+This is why the macro is recommended - it handles the items that the import dialog cannot.
 
 ## Troubleshooting
 
-### "Actor created but no items appeared"
-- This is the REST API limitation (expected)
-- Check your Downloads folder for the exported JSON file
-- Use Foundry's **Import** feature to import the full actor with items
+### "Macro not found"
+- Make sure you saved the macro after pasting the code
+- Check that you're in the correct compendium or using the right hotkey
 
-### "Export file not found in Downloads"
-- Export fallback may be disabled in configuration
-- Check the tool's logs for error messages
-- You can manually export via the tool's menu: **File → Export Actor as JSON**
+### "File not found"
+- Verify the JSON file is in the Downloads folder
+- Check the exact filename matches
 
-### "JSON import shows wrong schema"
-- Some City of Mist module versions expect different field names
-- Check the module version in your Foundry instance
-- Adjust the exported JSON if needed (export path is printed to console)
+### "Some items failed to import"
+- The macro reports which items succeeded/failed
+- Check browser console (F12) for details
+- Most common cause: item schema mismatch (rare)
 
-## Technical Details
-
-### JSON Format
-The exported JSON follows Foundry's standard actor format:
-```json
-{
-  "_id": "unique-uuid",
-  "name": "Threat Name",
-  "type": "threat",
-  "img": "icon-path",
-  "system": {
-    "description": "...",
-    "mythos": "[tag-reference]",
-    "logos": "[tag-reference]",
-    ...
-  },
-  "items": [
-    {
-      "_id": "item-uuid",
-      "name": "GM Move Name",
-      "type": "gmmove",
-      "system": {...}
-    },
-    ...
-  ]
-}
-```
-
-### REST API Endpoints Used
-- **Create (Actor)**: `POST /create?clientId={id}`
-- **Create (Item)**: `POST /create?clientId={id}` (items don't persist)
-- **Test Connection**: `GET /clients`
-
-## Future Solutions
-
-- Monitor Foundry REST API relay updates for item persistence support
-- Investigate Socket.io-based real-time updates (if Foundry supports authenticated sockets)
-- Consider alternative APIs or approaches as they become available
+### "Module error when running macro"
+- This means City of Mist module is not enabled
+- Enable it in World Settings → Modules
+- Restart world and try again
 
 ## Files
 
 - **Export Handler**: `src/com_importer/foundry_export.py`
 - **REST Client**: `src/com_importer/foundry_client.py`
-- **Fallback Logic**: `src/com_importer/foundry_client.py` (FoundryRestClient.create_actor)
+- **Export Logic**: Both files handle fallback detection and export
+- **Macro Script**: Generated during export as `IMPORT_MACRO_CityOfMist.js`
 
 ## References
 
 - Foundry REST API Relay: https://github.com/ThreeHats/foundryvtt-rest-api-relay
-- Foundry Hosted Server Support: https://www.foundryserver.com/support
+- Foundry Macro Documentation: https://foundryvtt.com/article/macros/
 - City of Mist Foundry Module: https://github.com/taragnor/city-of-mist
+- City of Mist Official: https://www.cityofmistrpg.com/

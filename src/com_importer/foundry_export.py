@@ -23,17 +23,20 @@ class FoundryJsonExporter:
     def export_actor_to_file(
         actor_data: dict[str, Any],
         export_dir: Path | str | None = None,
+        export_macro: bool = True,
     ) -> str:
         """
         Export actor JSON to a file for manual import.
 
         This is a workaround for REST API relay limitations that prevent
-        proper item persistence. Users can download this file and import
-        it manually into their Foundry instance.
+        proper item persistence. When the macro is exported alongside the JSON,
+        users can run the macro to automatically import the complete actor with
+        all items.
 
         Args:
             actor_data: Foundry actor JSON object
             export_dir: Directory to save JSON file (defaults to ~/Downloads)
+            export_macro: If True, also export the import macro script
 
         Returns:
             Path to the exported JSON file
@@ -51,11 +54,23 @@ class FoundryJsonExporter:
         filename = f"fvtt-Actor-{actor_name}-{actor_id}.json"
         filepath = export_dir / filename
 
-        # Write JSON file
+        # Write actor JSON file
         with open(filepath, "w") as f:
             json.dump(actor_data, f, indent=2, default=str)
 
         logger.info(f"Exported actor to {filepath}")
+
+        # Optionally export macro script
+        if export_macro:
+            macro_code = FoundryJsonExporter.create_import_script()
+            macro_filename = "IMPORT_MACRO_CityOfMist.js"
+            macro_filepath = export_dir / macro_filename
+
+            with open(macro_filepath, "w") as f:
+                f.write(macro_code)
+
+            logger.info(f"Exported import macro to {macro_filepath}")
+
         return str(filepath)
 
     @staticmethod
@@ -94,63 +109,113 @@ class FoundryJsonExporter:
     @staticmethod
     def create_import_script() -> str:
         """
-        Generate a Macro script that users can run in Foundry to import JSON files.
+        Generate a production-ready Foundry Macro for importing threat actors with items.
+
+        This macro:
+        1. Lets users select a JSON export file
+        2. Creates the actor with all system data (description, mythos, logos, etc)
+        3. Automatically adds all items (moves, spectrums, tags, statuses)
+        4. Provides clear success/error feedback
 
         Returns:
             Foundry macro code as a string
         """
         macro_code = """
-// JSON Import Helper Macro
-// 1. Place a JSON file in your Downloads folder (e.g., fvtt-Actor-MyThreat-abc123.json)
+// ============================================================================
+// City of Mist Threat Actor Import Macro
+// ============================================================================
+// This macro automatically imports threat actors with all items from JSON files
+// exported by the CoM Importer tool.
+//
+// Usage:
+// 1. Save this as a new Macro in Foundry (Macros compendium)
 // 2. Run this macro
-// 3. Select the JSON file when prompted
-// 4. Actor will be created with all items properly linked
+// 3. Select the fvtt-Actor-*.json file from your Downloads folder
+// 4. Done! Actor created with all items
+// ============================================================================
 
 async function importActorFromJson() {
-    // Use native Foundry file picker
-    const files = await FilePicker.browse("data", "", {
-        extensions: [".json"]
-    });
-
-    if (!files.target) {
-        ui.notifications.error("No file selected");
-        return;
-    }
-
     try {
-        // Read the JSON file
-        const response = await fetch(files.target);
-        const actorData = await response.json();
+        // Step 1: Let user select file
+        ui.notifications.info("Select the threat JSON file to import...");
+        const files = await FilePicker.browse("data", "", {
+            extensions: [".json"],
+            wildcard: false
+        });
 
-        // Extract items before creating actor
+        if (!files.target) {
+            ui.notifications.warn("Import cancelled - no file selected");
+            return;
+        }
+
+        const fileName = files.target.split('/').pop();
+        ui.notifications.info(`Loading [${fileName}]...`);
+
+        // Step 2: Read and parse JSON file
+        const response = await fetch(files.target);
+        if (!response.ok) {
+            throw new Error(`Failed to read file: ${response.statusText}`);
+        }
+
+        const actorData = await response.json();
+        const actorName = actorData.name || "Unknown Threat";
         const items = actorData.items || [];
+
+        // Validate required fields
+        if (!actorData.name || !actorData.type) {
+            throw new Error("Invalid actor data: missing name or type field");
+        }
+
+        // Step 3: Prepare actor data (remove embedded items and ID for fresh creation)
         const actorDataForCreation = { ...actorData };
         delete actorDataForCreation.items;
         delete actorDataForCreation._id;
 
-        // Create the actor
+        ui.notifications.info(`Creating actor: ${actorName}...`);
+
+        // Step 4: Create the actor
         const createdActor = await Actor.create(actorDataForCreation);
 
         if (!createdActor) {
-            ui.notifications.error("Failed to create actor");
-            return;
+            throw new Error("Failed to create actor in Foundry");
         }
 
-        // Add items to the actor
+        ui.notifications.info(`Adding ${items.length} items to ${actorName}...`);
+
+        // Step 5: Add items to the actor
+        let itemCount = 0;
         for (const item of items) {
-            const itemData = { ...item };
-            delete itemData._id;
-            await createdActor.createEmbeddedDocuments("Item", [itemData]);
+            try {
+                const itemData = { ...item };
+                delete itemData._id; // Let Foundry generate new IDs
+                await createdActor.createEmbeddedDocuments("Item", [itemData]);
+                itemCount++;
+            } catch (itemError) {
+                console.warn(`Failed to add item "${item.name}":`, itemError);
+                // Continue with other items even if one fails
+            }
         }
 
-        ui.notifications.info(`Created actor "${createdActor.name}" with ${items.length} items`);
+        // Step 6: Success notification
+        let message;
+        if (itemCount === items.length) {
+            message = `✓ Created "${actorName}" with all ${items.length} items`;
+        } else {
+            const failedCount = items.length - itemCount;
+            message = `⚠ Created "${actorName}" with ${itemCount}/${items.length} items`
+                + ` (${failedCount} failed)`;
+        }
+
+        ui.notifications.info(message);
+        console.log(`[CoM Import] ${message}`);
 
     } catch (error) {
-        console.error(error);
+        console.error("[CoM Import Error]", error);
         ui.notifications.error(`Import failed: ${error.message}`);
     }
 }
 
+// Execute the import
 await importActorFromJson();
 """
         return macro_code.strip()
