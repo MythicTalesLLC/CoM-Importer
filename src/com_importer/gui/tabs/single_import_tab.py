@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ...actor_detector import ActorTypeDetector
 from ...character_parser import CharacterParser
 from ...danger_parser import DangerParser, ParsingError
 
@@ -43,6 +44,13 @@ class SingleImportTab(QWidget):
         self.actor_type_combo.addItems(["Danger (Threat)", "Character (Player)"])
         self.actor_type_combo.currentIndexChanged.connect(self._on_actor_type_changed)
         type_layout.addWidget(self.actor_type_combo)
+
+        # Auto-detect button
+        auto_detect_btn = QPushButton("Auto-Detect")
+        auto_detect_btn.setMaximumWidth(100)
+        auto_detect_btn.clicked.connect(self._auto_detect_actor_type)
+        type_layout.addWidget(auto_detect_btn)
+
         type_layout.addStretch()
         layout.addLayout(type_layout)
 
@@ -131,6 +139,29 @@ class SingleImportTab(QWidget):
             self.actor_type = "character"
         logger.debug(f"Actor type changed to: {self.actor_type}")
 
+    def _auto_detect_actor_type(self) -> None:
+        """Auto-detect actor type based on pasted text and update dropdown."""
+        text = self.text_input.toPlainText()
+        if not text.strip():
+            return
+
+        detected_type = ActorTypeDetector.detect(text)
+        confidence = ActorTypeDetector.confidence(text)
+
+        # Update dropdown to match detected type
+        if detected_type == "danger":
+            self.actor_type_combo.setCurrentIndex(0)
+        else:
+            self.actor_type_combo.setCurrentIndex(1)
+
+        # Log detection with confidence
+        threat_conf = confidence["danger"]
+        char_conf = confidence["character"]
+        logger.debug(
+            f"Auto-detected: {detected_type} "
+            f"(danger: {threat_conf:.0%}, character: {char_conf:.0%})"
+        )
+
     def _select_image(self) -> None:
         """Select an image file and OCR it."""
         file_path, _ = QFileDialog.getOpenFileName(
@@ -171,6 +202,9 @@ class SingleImportTab(QWidget):
             # Populate text field
             self.text_input.setPlainText(text)
             self.image_label.setText(f"✓ Extracted from: {file_path}")
+
+            # Auto-detect actor type from extracted text
+            self._auto_detect_actor_type()
 
             QMessageBox.information(
                 self,
@@ -249,6 +283,9 @@ class SingleImportTab(QWidget):
                 # Populate text field
                 self.text_input.setPlainText(text)
                 self.pdf_label.setText(f"✓ Extracted page {page_num} from PDF")
+
+                # Auto-detect actor type from extracted text
+                self._auto_detect_actor_type()
 
                 QMessageBox.information(
                     self,
