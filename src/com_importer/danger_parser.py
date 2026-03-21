@@ -506,8 +506,14 @@ class DangerParser:
             if text_content.lower() in seen_names:
                 continue
 
-            # Determine move type based on content
+            # Determine move type based on content and formatting
+            # Logic:
+            # - If move contains a status tag (injured-3, etc) and NOT bolded → HARD
+            # - If move is NOT bolded AND has NO tag → SOFT
+            # - Otherwise (including bolded moves) → CUSTOM
             move_type = MoveType.CUSTOM
+
+            # Check for explicit move type markers first
             if "(hard move)" in text_content.lower():
                 move_type = MoveType.HARD
                 name = text_content.replace("(hard move)", "").replace("(Hard Move)", "").strip()
@@ -515,11 +521,43 @@ class DangerParser:
                 move_type = MoveType.SOFT
                 name = text_content.replace("(soft move)", "").replace("(Soft Move)", "").strip()
             else:
-                # Check for condition keywords
-                if any(word in text_content.lower() for word in self.MOVE_CONDITION_KEYWORDS):
-                    move_type = MoveType.CUSTOM
-
+                # No explicit markers, infer from formatting and content
                 name = text_content
+
+                # Check if this line has a status tag (e.g., injured-3, bleeding-2)
+                has_status_tag = bool(re.search(r"\w+-\d", text_content))
+
+                # Check if name might be bolded in OCR (**name** or similar)
+                # Bold might show as ** or __ in OCR markdown
+                is_bolded = (
+                    text_content.startswith("**")
+                    or text_content.startswith("__")
+                    or "**" in text_content
+                    or "__" in text_content
+                )
+
+                # Infer move type:
+                # Hard move: has tag, not bolded, no condition keywords
+                if (
+                    has_status_tag
+                    and not is_bolded
+                    and not any(
+                        word in text_content.lower() for word in self.MOVE_CONDITION_KEYWORDS
+                    )
+                ):
+                    move_type = MoveType.HARD
+                # Soft move: no tag, not bolded, no condition keywords
+                elif (
+                    not has_status_tag
+                    and not is_bolded
+                    and not any(
+                        word in text_content.lower() for word in self.MOVE_CONDITION_KEYWORDS
+                    )
+                ):
+                    move_type = MoveType.SOFT
+                # Custom otherwise (bolded, or has condition keywords)
+                else:
+                    move_type = MoveType.CUSTOM
 
             # If there's a colon, split into name and description
             if ":" in text_content:
@@ -625,10 +663,12 @@ class DangerParser:
                 desc = " ".join(desc_lines).strip()
 
             if name and name.strip():
+                # Clean up bold markers (** or __) from name
+                cleaned_name = name.strip().replace("**", "").replace("__", "").strip()
                 moves.append(
                     GMMove(
-                        name=name.strip(),
-                        description=desc.strip() if desc.strip() else name.strip(),
+                        name=cleaned_name,
+                        description=(desc.strip() if desc.strip() else cleaned_name),
                         move_type=move_type,
                     )
                 )
