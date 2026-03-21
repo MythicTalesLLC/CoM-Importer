@@ -272,7 +272,23 @@ class EditActorDialog(QDialog):
 
     def _on_save(self) -> None:
         """Save changes and close dialog."""
+        # Log before applying edits
+        if not self.is_character:
+            print("\n[EDIT] Before _apply_edits():")
+            print(f"[EDIT]   - GM Moves: {len(self.actor.gm_moves)}")
+            print(f"[EDIT]   - Spectrums: {len(self.actor.spectrums)}")
+            print(f"[EDIT]   - Tags: {len(self.actor.tags)}")
+            print(f"[EDIT]   - Statuses: {len(self.actor.statuses)}")
+
         self._apply_edits()
+
+        # Log after applying edits
+        if not self.is_character:
+            print("[EDIT] After _apply_edits():")
+            print(f"[EDIT]   - GM Moves: {len(self.actor.gm_moves)}")
+            print(f"[EDIT]   - Spectrums: {len(self.actor.spectrums)}")
+            print(f"[EDIT]   - Tags: {len(self.actor.tags)}")
+            print(f"[EDIT]   - Statuses: {len(self.actor.statuses)}")
 
         # Validate
         errors = self.actor.validate()

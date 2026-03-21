@@ -439,7 +439,18 @@ class SingleImportTab(QWidget):
             if self.current_actor_type == "threat":
                 from ...danger_to_foundry import convert_danger_to_foundry
 
+                # Log what's in the actor before conversion
+                print(f"\n[CONVERT] About to convert threat actor: {self.current_actor.name}")
+                print(f"[CONVERT]   - GM Moves: {len(self.current_actor.gm_moves)}")
+                print(f"[CONVERT]   - Spectrums: {len(self.current_actor.spectrums)}")
+                print(f"[CONVERT]   - Tags: {len(self.current_actor.tags)}")
+                print(f"[CONVERT]   - Statuses: {len(self.current_actor.statuses)}")
+
                 actor_json = convert_danger_to_foundry(self.current_actor)
+
+                # Log what came out of the converter
+                print("[CONVERT] After conversion:")
+                print(f"[CONVERT]   - Items in JSON: {len(actor_json.get('items', []))}")
             else:
                 from ...character_to_foundry import convert_character_to_foundry
 
