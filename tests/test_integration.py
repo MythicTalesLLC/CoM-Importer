@@ -176,8 +176,12 @@ class TestFoundryConversion:
 
         spectrums = [item for item in actor_json["items"] if item.get("type") == "spectrum"]
         assert len(spectrums) == 2
-        assert spectrums[0]["name"] == "Hurt"
-        assert spectrums[0]["system"]["maxTier"] == 4
+        # Spectrums are sorted alphabetically, so "Caught" comes before "Hurt"
+        spectrum_names = {spec["name"] for spec in spectrums}
+        assert spectrum_names == {"Hurt", "Caught"}
+        # Verify the spectrum with maxTier=4
+        hurt_spectrum = next(spec for spec in spectrums if spec["name"] == "Hurt")
+        assert hurt_spectrum["system"]["maxTier"] == 4
 
 
 class TestEndToEndPipeline:

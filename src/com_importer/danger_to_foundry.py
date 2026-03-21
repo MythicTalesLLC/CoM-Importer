@@ -206,6 +206,25 @@ class DangerToActorConverter:
             if "ownership" not in item:
                 item["ownership"] = {"default": 0}
 
+        # Sort items: hard moves → soft moves → custom moves → spectrums → tags
+        items = actor_json.get("items", [])
+
+        def sort_key(item):
+            item_type = item.get("type", "")
+            if item_type == "gmmove":
+                subtype = item.get("system", {}).get("subtype", "custom")
+                # Hard moves first (0), soft second (1), custom third (2)
+                order = {"hard": 0, "soft": 1, "custom": 2}.get(subtype, 3)
+                return (order, item.get("name", ""))
+            elif item_type == "spectrum":
+                return (3, item.get("name", ""))
+            elif item_type == "tag":
+                return (4, item.get("name", ""))
+            else:
+                return (5, item.get("name", ""))
+
+        actor_json["items"] = sorted(items, key=sort_key)
+
         # Clean up HTML in fields
         for field in ("biography", "description", "short_description", "gmnotes"):
             if field in system and system[field]:
