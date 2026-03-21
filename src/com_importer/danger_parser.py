@@ -47,7 +47,18 @@ class DangerParser:
     # Pattern to detect spectrum entries (e.g., "Hurt: 0/4", "Health: 1/5")
     SPECTRUM_PATTERN = r"([\w\s]+?):\s*(\d+)/(\d+)"  # "Name: current/max" format
     # Alternative pattern for "GET INTO TROUBLE X / HURT OR SUBDUE Y" format
-    SPECTRUM_ALT_PATTERN = r"([A-Z][A-Z\s]+?)\s+(\d+)\s*/\s*([A-Z][A-Z\s]+?)\s+(\d+)"
+    # Also matches OCR'd numbers (S→5, O→0, l→1, I→1)
+    SPECTRUM_ALT_PATTERN = r"([A-Z][A-Z\s]+?)\s+([0-9SOIl]+)\s*/\s*([A-Z][A-Z\s]+?)\s+([0-9SOIl]+)"
+
+    # OCR correction mapping for common misreads in spectrum values
+    OCR_DIGIT_MAP = {
+        "S": "5",
+        "O": "0",
+        "I": "1",
+        "l": "1",
+        "Z": "2",
+        "B": "8",
+    }
 
     # Pattern for tags in brackets
     TAG_PATTERN = r"\[([^\]]+)\]"
@@ -202,6 +213,17 @@ class DangerParser:
 
         return "\n".join(description_lines).strip()
 
+    def _correct_ocr_digit(self, text: str) -> str:
+        """Correct common OCR misreadings of digits.
+
+        Converts letters that look like digits back to actual digits:
+        S→5, O→0, I→1, l→1, Z→2, B→8
+        """
+        result = text
+        for letter, digit in self.OCR_DIGIT_MAP.items():
+            result = result.replace(letter, digit)
+        return result
+
     def _extract_spectrums(self, text: str) -> list[Spectrum]:
         """Extract spectrums from text.
 
@@ -249,15 +271,23 @@ class DangerParser:
                 seen_spectrum_names.add(name.lower())
 
         # Try alternative pattern: "GET INTO TROUBLE 3 / HURT OR SUBDUE 2"
-        # Look for all cap phrases with numbers separated by /
-        alt_patterns = re.findall(
-            r"([A-Z][A-Z\s]+?)\s+(\d+)\s*/\s*([A-Z][A-Z\s]+?)\s+(\d+)", spectrum_text
-        )
-        for match in alt_patterns:
-            name1 = match[0].strip()
-            current1 = int(match[1])
-            name2 = match[2].strip()
-            current2 = int(match[3])
+        # Matches with flexible digit patterns (handles OCR errors like S→5)
+        for match in re.finditer(self.SPECTRUM_ALT_PATTERN, spectrum_text):
+            name1 = match.group(1).strip()
+            value1_raw = match.group(2)
+            name2 = match.group(3).strip()
+            value2_raw = match.group(4)
+
+            # Correct OCR digit misreadings
+            value1_str = self._correct_ocr_digit(value1_raw)
+            value2_str = self._correct_ocr_digit(value2_raw)
+
+            try:
+                current1 = int(value1_str)
+                current2 = int(value2_str)
+            except ValueError:
+                # Skip if we can't parse the values even after correction
+                continue
 
             # Add both as separate spectrums
             if name1.lower() not in seen_spectrum_names and len(name1) < 50:
