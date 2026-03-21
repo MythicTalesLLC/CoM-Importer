@@ -7,13 +7,16 @@ class ActorTypeDetector:
     """Detect whether text describes a threat/danger or player character."""
 
     THREAT_INDICATORS = [
-        "FOOL",  # Threat stat
-        "SCARE",  # Threat stat
+        "FOOL",  # Common threat stat
+        "SCARE",  # Common threat stat
+        "GET INTO TROUBLE",  # Alternative threat stat format
+        "HURT OR SUBDUE",  # Alternative threat stat format
         "Hard Move",  # Threat ability
         "Soft Move",  # Threat ability
         "Custom Move",  # Threat ability
         "Danger Rating",  # Threat descriptor
         "Spectrum",  # Threat only (characters don't have spectrums)
+        "Knock for",  # Threat-specific ability language pattern
     ]
 
     CHARACTER_INDICATORS = [
@@ -27,6 +30,7 @@ class ActorTypeDetector:
         "She/",  # Pronoun
         "He/",  # Pronoun
         "They/",  # Pronoun
+        "Theme",  # Character-specific term
     ]
 
     @staticmethod
