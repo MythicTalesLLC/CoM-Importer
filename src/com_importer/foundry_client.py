@@ -36,7 +36,10 @@ class FoundryClient(ABC):
 
 
 class FoundryRestClient(FoundryClient):
-    """Client for remote Foundry instances via REST API."""
+    """Client for remote Foundry instances via REST API relay.
+
+    Works with foundryvtt-rest-api-relay: https://github.com/ThreeHats/foundryvtt-rest-api-relay
+    """
 
     def __init__(
         self,
@@ -50,8 +53,8 @@ class FoundryRestClient(FoundryClient):
 
         Args:
             api_url: Base URL of Foundry REST API relay (e.g., https://foundryvtt-rest-api-relay.fly.dev)
-            api_key: API authentication key
-            client_id: Client ID for authentication
+            api_key: API authentication key (x-api-key header)
+            client_id: Client ID identifying the Foundry world on the relay
             world_name: Name of the Foundry world/game
         """
         self.api_url = api_url.rstrip("/")
@@ -61,32 +64,30 @@ class FoundryRestClient(FoundryClient):
         self.session = requests.Session()
         self.session.headers.update(
             {
-                "Authorization": f"Bearer {api_key}",
-                "X-Client-ID": client_id,
+                "x-api-key": api_key,
+                "x-client-id": client_id,
                 "Content-Type": "application/json",
             }
         )
 
     def test_connection(self) -> tuple[bool, str]:
-        """Test connection to Foundry API."""
+        """Test connection to Foundry API relay.
+
+        Attempts to connect to /clients endpoint to verify the relay is running.
+        """
         try:
-            # Try the worlds endpoint first
-            endpoint = urljoin(self.api_url, f"/api/worlds/{self.world_name}")
+            # Test connection to /clients endpoint (lists connected Foundry worlds)
+            endpoint = urljoin(self.api_url, "/clients")
             response = self.session.get(endpoint, timeout=10)
 
             if response.status_code == 200:
-                return True, "Connection successful"
+                clients = response.json()
+                if isinstance(clients, list) and len(clients) > 0:
+                    return True, f"Connected. Found {len(clients)} Foundry client(s)"
+                return True, "API relay responding (no clients connected yet)"
 
-            # If worlds endpoint doesn't exist (404), try /api/ health check
-            if response.status_code == 404:
-                health_endpoint = urljoin(self.api_url, "/api/")
-                health_response = self.session.get(health_endpoint, timeout=10)
-                if health_response.status_code in (200, 404):
-                    # Even 404 on /api/ means the server is responding
-                    return (
-                        True,
-                        "API server responding (world validation pending)",
-                    )
+            if response.status_code == 401:
+                return False, "Authentication failed: Invalid API key"
 
             return False, f"HTTP {response.status_code}: {response.text[:200]}"
         except requests.RequestException as e:
@@ -94,7 +95,7 @@ class FoundryRestClient(FoundryClient):
 
     def create_actor(self, actor_data: dict[str, Any]) -> str:
         """
-        Create a new actor in Foundry.
+        Create a new actor in Foundry via REST API.
 
         Args:
             actor_data: Foundry actor object
@@ -105,8 +106,12 @@ class FoundryRestClient(FoundryClient):
         Raises:
             Exception: If creation fails
         """
-        endpoint = urljoin(self.api_url, f"/api/worlds/{self.world_name}/actors")
-        response = self.session.post(endpoint, json=actor_data, timeout=30)
+        endpoint = urljoin(self.api_url, "/create")
+        payload = {
+            "collection": "actors",
+            "data": actor_data,
+        }
+        response = self.session.post(endpoint, json=payload, timeout=30)
         if response.status_code not in (200, 201):
             raise Exception(
                 f"Failed to create actor: HTTP {response.status_code} - {response.text}"
@@ -116,7 +121,7 @@ class FoundryRestClient(FoundryClient):
 
     def update_actor(self, actor_id: str, actor_data: dict[str, Any]) -> None:
         """
-        Update an existing actor.
+        Update an existing actor via REST API.
 
         Args:
             actor_id: Foundry actor ID
@@ -125,8 +130,13 @@ class FoundryRestClient(FoundryClient):
         Raises:
             Exception: If update fails
         """
-        endpoint = urljoin(self.api_url, f"/api/worlds/{self.world_name}/actors/{actor_id}")
-        response = self.session.patch(endpoint, json=actor_data, timeout=30)
+        endpoint = urljoin(self.api_url, "/update")
+        payload = {
+            "collection": "actors",
+            "_id": actor_id,
+            "data": actor_data,
+        }
+        response = self.session.patch(endpoint, json=payload, timeout=30)
         if response.status_code not in (200, 204):
             raise Exception(
                 f"Failed to update actor: HTTP {response.status_code} - {response.text}"
@@ -134,7 +144,7 @@ class FoundryRestClient(FoundryClient):
 
     def add_item_to_actor(self, actor_id: str, item_data: dict[str, Any]) -> None:
         """
-        Add an item to an actor.
+        Add an item to an actor via REST API.
 
         Args:
             actor_id: Foundry actor ID
@@ -143,11 +153,12 @@ class FoundryRestClient(FoundryClient):
         Raises:
             Exception: If addition fails
         """
-        endpoint = urljoin(
-            self.api_url,
-            f"/api/worlds/{self.world_name}/actors/{actor_id}/items",
-        )
-        response = self.session.post(endpoint, json=item_data, timeout=30)
+        endpoint = urljoin(self.api_url, "/create")
+        payload = {
+            "collection": "items",
+            "data": {**item_data, "parent": actor_id},
+        }
+        response = self.session.post(endpoint, json=payload, timeout=30)
         if response.status_code not in (200, 201):
             raise Exception(f"Failed to add item: HTTP {response.status_code} - {response.text}")
 
