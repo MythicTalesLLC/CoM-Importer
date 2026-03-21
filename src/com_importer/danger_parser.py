@@ -311,48 +311,47 @@ class DangerParser:
             name2 = match.group(3).strip()
             value2_raw = match.group(4)
 
-            # Skip if no valid values to extract
+            # Try to add spectrum 1 if it has a valid value
             if (
-                not value1_raw.strip()
-                or not value2_raw.strip()
-                or value1_raw == "-"
-                or value2_raw == "-"
+                value1_raw.strip()
+                and value1_raw != "-"
+                and name1.lower() not in seen_spectrum_names
+                and len(name1) < 50
             ):
-                continue
+                value1_str = self._correct_ocr_digit(value1_raw)
+                try:
+                    current1 = int(value1_str)
+                    spectrum1 = Spectrum(
+                        name=name1,
+                        max_tier=current1,
+                        current_tier=current1,
+                        pips=0,
+                    )
+                    spectrums.append(spectrum1)
+                    seen_spectrum_names.add(name1.lower())
+                except ValueError:
+                    pass
 
-            # Correct OCR digit misreadings
-            value1_str = self._correct_ocr_digit(value1_raw)
-            value2_str = self._correct_ocr_digit(value2_raw)
-
-            try:
-                current1 = int(value1_str)
-                current2 = int(value2_str)
-            except ValueError:
-                # Skip if we can't parse the values even after correction
-                continue
-
-            # Add both as separate spectrums
-            # For alternate pattern, the extracted values are likely the current/max state
-            # Use current values as max_tier since they represent the tier level
-            if name1.lower() not in seen_spectrum_names and len(name1) < 50:
-                spectrum1 = Spectrum(
-                    name=name1,
-                    max_tier=current1,  # Use extracted value as max_tier
-                    current_tier=current1,  # Set current equal to max for display
-                    pips=0,
-                )
-                spectrums.append(spectrum1)
-                seen_spectrum_names.add(name1.lower())
-
-            if name2.lower() not in seen_spectrum_names and len(name2) < 50:
-                spectrum2 = Spectrum(
-                    name=name2,
-                    max_tier=current2,  # Use extracted value as max_tier
-                    current_tier=current2,  # Set current equal to max for display
-                    pips=0,
-                )
-                spectrums.append(spectrum2)
-                seen_spectrum_names.add(name2.lower())
+            # Try to add spectrum 2 if it has a valid value
+            if (
+                value2_raw.strip()
+                and value2_raw != "-"
+                and name2.lower() not in seen_spectrum_names
+                and len(name2) < 50
+            ):
+                value2_str = self._correct_ocr_digit(value2_raw)
+                try:
+                    current2 = int(value2_str)
+                    spectrum2 = Spectrum(
+                        name=name2,
+                        max_tier=current2,
+                        current_tier=current2,
+                        pips=0,
+                    )
+                    spectrums.append(spectrum2)
+                    seen_spectrum_names.add(name2.lower())
+                except ValueError:
+                    pass
 
         return spectrums
 
@@ -640,10 +639,11 @@ class DangerParser:
         return moves
 
     def _extract_tags_from_text(self, text: str) -> list[Tag]:
-        """Extract tags mentioned in brackets [tag-name]."""
+        """Extract tags mentioned in brackets [tag-name] and auto-generate from text."""
         tags = []
         seen_tags = set()
 
+        # First, extract explicit bracket tags
         for match in re.finditer(self.TAG_PATTERN, text):
             tag_name = match.group(1).strip()
 
@@ -661,6 +661,65 @@ class DangerParser:
                     tag_type=tag_type,
                 )
             )
+
+        # Auto-generate tags from threat name and keywords
+        # Extract threat name keywords (remove common words)
+        name_match = self._extract_name(text)
+        if name_match and name_match != "Untitled Danger":
+            # Replace numbers and make lowercase, split into words
+            name_words = re.sub(r"[0-9★⭐]", "", name_match).lower().split()
+            for word in name_words:
+                word = word.strip("-'").lower()
+                # Skip very short or common words
+                if len(word) > 2 and word not in {
+                    "the",
+                    "and",
+                    "for",
+                    "with",
+                    "from",
+                    "are",
+                    "can",
+                    "has",
+                    "its",
+                }:
+                    tag_name = word
+                    if tag_name not in seen_tags:
+                        tag_type = self._infer_tag_type(tag_name)
+                        tags.append(
+                            Tag(
+                                name=tag_name,
+                                tag_type=tag_type,
+                            )
+                        )
+                        seen_tags.add(tag_name)
+
+        # Auto-generate tags from key threat characteristics in description
+        description = self._extract_description(text)
+        if description:
+            desc_lower = description.lower()
+            # Look for specific threat keywords
+            threat_keywords = {
+                "criminal": "threat",
+                "underworld": "threat",
+                "network": "threat",
+                "power": "power",
+                "control": "power",
+                "violent": "threat",
+                "dangerous": "threat",
+                "formidable": "threat",
+                "ruthless": "threat",
+                "empire": "threat",
+                "organization": "threat",
+            }
+            for keyword, inferred_type in threat_keywords.items():
+                if keyword in desc_lower and keyword not in seen_tags:
+                    tags.append(
+                        Tag(
+                            name=keyword,
+                            tag_type=self._infer_tag_type(inferred_type),
+                        )
+                    )
+                    seen_tags.add(keyword)
 
         return tags
 
