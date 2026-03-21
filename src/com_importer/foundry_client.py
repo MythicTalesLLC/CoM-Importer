@@ -120,6 +120,8 @@ class FoundryRestClient(FoundryClient):
         Raises:
             Exception: If creation fails
         """
+        logger.info(f"create_actor() called for: {actor_data.get('name')}")
+
         # Build actor data for creation - include system fields
         create_actor_data = {
             "name": actor_data.get("name", "New Actor"),
@@ -140,6 +142,7 @@ class FoundryRestClient(FoundryClient):
             "collection": "actors",
             "data": create_actor_data,
         }
+        logger.debug(f"Posting to {endpoint}")
         response = self.session.post(endpoint, json=payload, timeout=30)
         if response.status_code not in (200, 201):
             raise Exception(
@@ -149,6 +152,8 @@ class FoundryRestClient(FoundryClient):
         # REST API returns entity nested within response
         entity = result.get("entity", {})
         actor_id = entity.get("_id", result.get("_id", result.get("id", "")))
+
+        logger.info(f"Actor created with ID: {actor_id}")
 
         # Add items (spectrums, moves, tags, etc.) after creation
         if actor_id and actor_data.get("items"):
@@ -163,6 +168,7 @@ class FoundryRestClient(FoundryClient):
                     logger.error(f"  Failed to add item {i+1}: {str(e)[:100]}")
                     pass
 
+        logger.info(f"create_actor() complete for {actor_id}")
         return actor_id
 
     def update_actor(self, actor_id: str, actor_data: dict[str, Any]) -> None:
