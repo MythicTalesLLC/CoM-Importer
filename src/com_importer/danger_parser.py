@@ -290,11 +290,13 @@ class DangerParser:
                 continue
 
             # Add both as separate spectrums
+            # For alternate pattern, the extracted values are likely the current/max state
+            # Use current values as max_tier since they represent the tier level
             if name1.lower() not in seen_spectrum_names and len(name1) < 50:
                 spectrum1 = Spectrum(
                     name=name1,
-                    max_tier=3,  # Default to 3 for these types
-                    current_tier=current1,
+                    max_tier=current1,  # Use extracted value as max_tier
+                    current_tier=current1,  # Set current equal to max for display
                     pips=0,
                 )
                 spectrums.append(spectrum1)
@@ -303,8 +305,8 @@ class DangerParser:
             if name2.lower() not in seen_spectrum_names and len(name2) < 50:
                 spectrum2 = Spectrum(
                     name=name2,
-                    max_tier=3,  # Default to 3 for these types
-                    current_tier=current2,
+                    max_tier=current2,  # Use extracted value as max_tier
+                    current_tier=current2,  # Set current equal to max for display
                     pips=0,
                 )
                 spectrums.append(spectrum2)
@@ -383,20 +385,24 @@ class DangerParser:
         return moves
 
     def _extract_custom_moves(self, text: str) -> list[GMMove]:
-        """Extract custom moves from bullet points.
+        """Extract custom moves from bullet points with multi-line descriptions.
 
         Captures both:
         - Conditional moves: "When X happens, Y" or "If condition: action"
         - Simple moves/abilities: "Get someone to like her (friendly-2)"
         - Moves marked with "(hard move)" or "(soft move)"
+        Continues reading lines after move name to capture full descriptions.
         """
         moves = []
         seen_names = set()
 
         # Look for all potential move lines
         lines = text.split("\n")
-        for line in lines:
-            line = line.strip()
+        i = 0
+        while i < len(lines):
+            line = lines[i].strip()
+            i += 1
+
             if not line:
                 continue
 
@@ -412,7 +418,7 @@ class DangerParser:
 
             # Strip common bullet characters if present
             text_content = line
-            if line[0] in "•-*":
+            if line and line[0] in "•-*":
                 text_content = line.lstrip("•-* ").strip()
                 is_potential_move = True
             elif "(hard move)" in line.lower() or "(soft move)" in line.lower():
@@ -461,6 +467,38 @@ class DangerParser:
                 name, desc = text_content.split(":", 1)
                 name = name.strip()
                 desc = desc.strip()
+
+                # Collect continuation lines for multi-line descriptions
+                description_lines = [desc] if desc else []
+                while i < len(lines):
+                    next_line = lines[i].strip()
+                    # Stop if we hit another bullet/move
+                    if not next_line:
+                        i += 1
+                        continue
+                    if next_line[0] in "•-*" or any(
+                        next_line.lower().startswith(kw)
+                        for kw in (
+                            "when ",
+                            "if ",
+                            "get ",
+                            "slam ",
+                            "accelerate",
+                            "takes ",
+                            "rolls ",
+                            "spends",
+                        )
+                    ):
+                        break
+                    # Add this line to description
+                    description_lines.append(next_line)
+                    i += 1
+
+                    # Stop after collecting reasonable amount (5 lines should be enough)
+                    if len(description_lines) >= 5:
+                        break
+
+                desc = " ".join(description_lines).strip()
             else:
                 # For simple moves without colons, use the full text as name
                 # Extract just the main part (before parenthetical notes)
