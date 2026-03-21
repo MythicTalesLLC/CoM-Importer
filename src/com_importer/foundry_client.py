@@ -108,11 +108,11 @@ class FoundryRestClient(FoundryClient):
         """
         Create a new actor in Foundry via REST API.
 
-        Creates actor with name, type, and system fields in initial creation.
-        Items (spectrums, moves, tags) are added after creation via /create endpoint.
+        Creates actor with all fields including items in initial creation.
+        This matches how the local filesystem client works.
 
         Args:
-            actor_data: Foundry actor object
+            actor_data: Foundry actor object (includes items array)
 
         Returns:
             Actor ID
@@ -125,27 +125,16 @@ class FoundryRestClient(FoundryClient):
 
         logger.info(f"create_actor() called for: {actor_data.get('name')}")
 
-        # Build actor data for creation - include system fields
-        create_actor_data = {
-            "name": actor_data.get("name", "New Actor"),
-            "type": actor_data.get("type", "threat"),
-        }
-
-        # Add img if present
-        if actor_data.get("img"):
-            create_actor_data["img"] = actor_data["img"]
-
-        # Add system fields (description, mythos, logos, etc.)
-        if actor_data.get("system"):
-            create_actor_data["system"] = actor_data["system"]
-
+        # Send entire actor data including items in the initial creation
+        # This matches how the local filesystem client works
         endpoint = urljoin(self.api_url, f"/create?clientId={self.client_id}")
         payload = {
             "entityType": "Actor",
             "collection": "actors",
-            "data": create_actor_data,
+            "data": actor_data,
         }
         logger.debug(f"Posting to {endpoint}")
+        print(f"[TRACE] Payload includes {len(actor_data.get('items', []))} items")
         response = self.session.post(endpoint, json=payload, timeout=30)
         if response.status_code not in (200, 201):
             raise Exception(
@@ -158,30 +147,6 @@ class FoundryRestClient(FoundryClient):
 
         print(f"[TRACE] Actor created with ID: {actor_id}")
         logger.info(f"Actor created with ID: {actor_id}")
-
-        # Add items (spectrums, moves, tags, etc.) after creation
-        if actor_id and actor_data.get("items"):
-            items = actor_data.get("items", [])
-            print(f"[TRACE] Starting to add {len(items)} items to actor {actor_id}")
-            logger.info(f"Adding {len(items)} items to actor {actor_id}")
-            for i, item_data in enumerate(items):
-                try:
-                    print(f"[TRACE] Adding item {i+1}/{len(items)}: {item_data.get('name')}")
-                    self.add_item_to_actor(actor_id, item_data)
-                    item_name = item_data.get("name", "Unknown")
-                    print(f"[TRACE] ✓ Item {i+1} added: {item_name}")
-                    logger.info(f"  Item {i+1}/{len(items)}: {item_name}")
-                except Exception as e:
-                    # Log but don't fail - actor was created
-                    print(f"[TRACE] ✗ Item {i+1} failed: {str(e)[:100]}")
-                    logger.error(f"  Failed to add item {i+1}: {str(e)[:100]}")
-                    pass
-        else:
-            if actor_id:
-                print(f"[TRACE] No items to add (actor_data.items = {actor_data.get('items')})")
-            else:
-                print(f"[TRACE] No actor_id or items")
-
         print(f"[TRACE] create_actor() complete for {actor_id}\n")
         logger.info(f"create_actor() complete for {actor_id}")
         return actor_id
