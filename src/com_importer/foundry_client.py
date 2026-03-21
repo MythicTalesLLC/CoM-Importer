@@ -120,6 +120,9 @@ class FoundryRestClient(FoundryClient):
         Raises:
             Exception: If creation fails
         """
+        print(f"\n[TRACE] create_actor() called for: {actor_data.get('name')}")
+        print(f"[TRACE] Items in actor_data: {len(actor_data.get('items', []))}")
+
         logger.info(f"create_actor() called for: {actor_data.get('name')}")
 
         # Build actor data for creation - include system fields
@@ -153,21 +156,33 @@ class FoundryRestClient(FoundryClient):
         entity = result.get("entity", {})
         actor_id = entity.get("_id", result.get("_id", result.get("id", "")))
 
+        print(f"[TRACE] Actor created with ID: {actor_id}")
         logger.info(f"Actor created with ID: {actor_id}")
 
         # Add items (spectrums, moves, tags, etc.) after creation
         if actor_id and actor_data.get("items"):
-            logger.info(f"Adding {len(actor_data['items'])} items to actor {actor_id}")
-            for i, item_data in enumerate(actor_data["items"]):
+            items = actor_data.get("items", [])
+            print(f"[TRACE] Starting to add {len(items)} items to actor {actor_id}")
+            logger.info(f"Adding {len(items)} items to actor {actor_id}")
+            for i, item_data in enumerate(items):
                 try:
+                    print(f"[TRACE] Adding item {i+1}/{len(items)}: {item_data.get('name')}")
                     self.add_item_to_actor(actor_id, item_data)
                     item_name = item_data.get("name", "Unknown")
-                    logger.info(f"  Item {i+1}/{len(actor_data['items'])}: {item_name}")
+                    print(f"[TRACE] ✓ Item {i+1} added: {item_name}")
+                    logger.info(f"  Item {i+1}/{len(items)}: {item_name}")
                 except Exception as e:
                     # Log but don't fail - actor was created
+                    print(f"[TRACE] ✗ Item {i+1} failed: {str(e)[:100]}")
                     logger.error(f"  Failed to add item {i+1}: {str(e)[:100]}")
                     pass
+        else:
+            if actor_id:
+                print(f"[TRACE] No items to add (actor_data.items = {actor_data.get('items')})")
+            else:
+                print(f"[TRACE] No actor_id or items")
 
+        print(f"[TRACE] create_actor() complete for {actor_id}\n")
         logger.info(f"create_actor() complete for {actor_id}")
         return actor_id
 
@@ -217,9 +232,12 @@ class FoundryRestClient(FoundryClient):
             "data": {**item_for_creation, "parent": actor_id},
         }
         logger.debug(f"Adding item: {item_data.get('name')} (type: {item_data.get('type')})")
+        print(f"[DEBUG] Adding item to {actor_id}: {item_data.get('name')}")  # Console output
         response = self.session.post(endpoint, json=payload, timeout=30)
+        print(f"[DEBUG] Response: {response.status_code}")  # Console output
         if response.status_code not in (200, 201):
             logger.error(f"Failed to add item {item_data.get('name')}: HTTP {response.status_code}")
+            print(f"[ERROR] Failed to add item: HTTP {response.status_code}")  # Console output
             raise Exception(f"Failed to add item: HTTP {response.status_code} - {response.text}")
 
 

@@ -115,8 +115,19 @@ class ComImporterWindow(QMainWindow):
         self.batch_import_tab.set_foundry_client(client)
 
         # Pass OCR configuration to single import tab
+        # Map GUI labels to factory method names
+        def _map_ocr_method(gui_label: str) -> str:
+            mapping = {
+                "Auto (Tesseract first)": "auto",
+                "Tesseract (Local)": "tesseract",
+                "Cloud Vision": "cloud_vision",
+                "Disabled": "disabled",
+            }
+            return mapping.get(gui_label, "auto")
+
         config = self.config_tab.get_config()
-        self.single_import_tab._ocr_method = config.get("ocr_method", "auto")
+        ocr_method_label = config.get("ocr_method", "Auto (Tesseract first)")
+        self.single_import_tab._ocr_method = _map_ocr_method(ocr_method_label)
         self.single_import_tab._tesseract_path = config.get("tesseract_path")
         self.single_import_tab._vision_api_key = config.get("vision_api_key")
 
