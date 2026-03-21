@@ -125,16 +125,28 @@ class FoundryRestClient(FoundryClient):
 
         logger.info(f"create_actor() called for: {actor_data.get('name')}")
 
+        # Prepare actor data - strip _id from items since REST API generates them
+        actor_for_creation = {k: v for k, v in actor_data.items() if k != "_id"}
+
+        # Clean up items: remove _id fields (REST API will generate them)
+        if actor_for_creation.get("items"):
+            cleaned_items = []
+            for item in actor_for_creation["items"]:
+                cleaned_item = {k: v for k, v in item.items() if k != "_id"}
+                cleaned_items.append(cleaned_item)
+            actor_for_creation["items"] = cleaned_items
+            print(f"[TRACE] Cleaned {len(cleaned_items)} items (removed _id fields)")
+
         # Send entire actor data including items in the initial creation
-        # This matches how the local filesystem client works
         endpoint = urljoin(self.api_url, f"/create?clientId={self.client_id}")
         payload = {
             "entityType": "Actor",
             "collection": "actors",
-            "data": actor_data,
+            "data": actor_for_creation,
         }
         logger.debug(f"Posting to {endpoint}")
-        print(f"[TRACE] Payload includes {len(actor_data.get('items', []))} items")
+        item_count = len(actor_for_creation.get("items", []))
+        print(f"[TRACE] Payload includes {item_count} items (IDs removed)")
         response = self.session.post(endpoint, json=payload, timeout=30)
         if response.status_code not in (200, 201):
             raise Exception(
