@@ -47,9 +47,10 @@ class DangerParser:
     # Pattern to detect spectrum entries (e.g., "Hurt: 0/4", "Health: 1/5")
     SPECTRUM_PATTERN = r"([\w\s]+?):\s*(\d+)/(\d+)"  # "Name: current/max" format
     # Alternative pattern for "GET INTO TROUBLE X / HURT OR SUBDUE Y" format
+    # Also matches space-separated: "HURT OR SUBDUE 3 THREATEN -"
     # Also matches OCR'd numbers (S→5, O→0, l→1, I→1) or incomplete (-)
     SPECTRUM_ALT_PATTERN = (
-        r"([A-Z][A-Z\s]+?)\s+([0-9SOIl-]+)\s*/\s*([A-Z][A-Z\s]+?)\s+([0-9SOIl-]*)"
+        r"([A-Z][A-Z\s]+?)\s+([0-9SOIl-]+)(?:\s*/\s*|\s+)([A-Z][A-Z\s]+?)\s+([0-9SOIl-]*)"
     )
 
     # OCR correction mapping for common misreads in spectrum values
