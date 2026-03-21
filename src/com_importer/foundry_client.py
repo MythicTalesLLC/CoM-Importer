@@ -105,6 +105,9 @@ class FoundryRestClient(FoundryClient):
         """
         Create a new actor in Foundry via REST API.
 
+        For REST API, we simplify the actor data to just essential fields
+        to avoid serialization issues with the relay.
+
         Args:
             actor_data: Foundry actor object
 
@@ -114,11 +117,22 @@ class FoundryRestClient(FoundryClient):
         Raises:
             Exception: If creation fails
         """
+        # Simplify actor data for REST API compatibility
+        # Only send essential fields - let Foundry fill in defaults
+        simplified_actor = {
+            "name": actor_data.get("name", "New Actor"),
+            "type": actor_data.get("type", "threat"),
+        }
+
+        # Add optional fields if present and non-empty
+        if actor_data.get("img"):
+            simplified_actor["img"] = actor_data["img"]
+
         endpoint = urljoin(self.api_url, f"/create?clientId={self.client_id}")
         payload = {
             "entityType": "Actor",
             "collection": "actors",
-            "data": actor_data,
+            "data": simplified_actor,
         }
         response = self.session.post(endpoint, json=payload, timeout=30)
         if response.status_code not in (200, 201):
