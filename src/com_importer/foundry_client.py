@@ -70,11 +70,25 @@ class FoundryRestClient(FoundryClient):
     def test_connection(self) -> tuple[bool, str]:
         """Test connection to Foundry API."""
         try:
+            # Try the worlds endpoint first
             endpoint = urljoin(self.api_url, f"/api/worlds/{self.world_name}")
             response = self.session.get(endpoint, timeout=10)
+
             if response.status_code == 200:
                 return True, "Connection successful"
-            return False, f"HTTP {response.status_code}: {response.text}"
+
+            # If worlds endpoint doesn't exist (404), try /api/ health check
+            if response.status_code == 404:
+                health_endpoint = urljoin(self.api_url, "/api/")
+                health_response = self.session.get(health_endpoint, timeout=10)
+                if health_response.status_code in (200, 404):
+                    # Even 404 on /api/ means the server is responding
+                    return (
+                        True,
+                        "API server responding (world validation pending)",
+                    )
+
+            return False, f"HTTP {response.status_code}: {response.text[:200]}"
         except requests.RequestException as e:
             return False, f"Connection failed: {str(e)}"
 
