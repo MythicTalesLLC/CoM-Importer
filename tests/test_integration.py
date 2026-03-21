@@ -177,7 +177,7 @@ class TestFoundryConversion:
         spectrums = [item for item in actor_json["items"] if item.get("type") == "spectrum"]
         assert len(spectrums) == 2
         assert spectrums[0]["name"] == "Hurt"
-        assert spectrums[0]["system"]["tier"] == 2
+        assert spectrums[0]["system"]["maxTier"] == 4
 
 
 class TestEndToEndPipeline:
