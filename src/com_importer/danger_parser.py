@@ -663,6 +663,32 @@ class DangerParser:
                 desc = " ".join(desc_lines).strip()
 
             if name and name.strip():
+                # Re-evaluate move type now that we have the full description
+                # (in case status tags were split across OCR lines)
+                full_text_for_type_check = f"{text_content} {desc}"
+                has_status_tag = bool(re.search(r"\w+-\d", full_text_for_type_check))
+                is_bolded = "**" in text_content or "__" in text_content
+
+                # Re-infer if not explicitly marked
+                if move_type == MoveType.CUSTOM or move_type == MoveType.SOFT:
+                    # Check based on full text
+                    if (
+                        has_status_tag
+                        and not is_bolded
+                        and not any(
+                            word in text_content.lower() for word in self.MOVE_CONDITION_KEYWORDS
+                        )
+                    ):
+                        move_type = MoveType.HARD
+                    elif (
+                        not has_status_tag
+                        and not is_bolded
+                        and not any(
+                            word in text_content.lower() for word in self.MOVE_CONDITION_KEYWORDS
+                        )
+                    ):
+                        move_type = MoveType.SOFT
+
                 # Clean up bold markers (** or __) from name
                 cleaned_name = name.strip().replace("**", "").replace("__", "").strip()
                 moves.append(
