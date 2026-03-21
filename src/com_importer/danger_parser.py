@@ -47,8 +47,10 @@ class DangerParser:
     # Pattern to detect spectrum entries (e.g., "Hurt: 0/4", "Health: 1/5")
     SPECTRUM_PATTERN = r"([\w\s]+?):\s*(\d+)/(\d+)"  # "Name: current/max" format
     # Alternative pattern for "GET INTO TROUBLE X / HURT OR SUBDUE Y" format
-    # Also matches OCR'd numbers (S→5, O→0, l→1, I→1)
-    SPECTRUM_ALT_PATTERN = r"([A-Z][A-Z\s]+?)\s+([0-9SOIl]+)\s*/\s*([A-Z][A-Z\s]+?)\s+([0-9SOIl]+)"
+    # Also matches OCR'd numbers (S→5, O→0, l→1, I→1) or incomplete (-)
+    SPECTRUM_ALT_PATTERN = (
+        r"([A-Z][A-Z\s]+?)\s+([0-9SOIl-]+)\s*/\s*([A-Z][A-Z\s]+?)\s+([0-9SOIl-]*)"
+    )
 
     # OCR correction mapping for common misreads in spectrum values
     OCR_DIGIT_MAP = {
@@ -309,6 +311,15 @@ class DangerParser:
             name2 = match.group(3).strip()
             value2_raw = match.group(4)
 
+            # Skip if no valid values to extract
+            if (
+                not value1_raw.strip()
+                or not value2_raw.strip()
+                or value1_raw == "-"
+                or value2_raw == "-"
+            ):
+                continue
+
             # Correct OCR digit misreadings
             value1_str = self._correct_ocr_digit(value1_raw)
             value2_str = self._correct_ocr_digit(value2_raw)
@@ -535,6 +546,7 @@ class DangerParser:
                     if not next_line:
                         i += 1
                         continue
+                    # Check if this is a new move (bullet point or keyword at start)
                     if next_line[0] in "•-*¢" or any(
                         next_line.lower().startswith(kw)
                         for kw in (
@@ -549,21 +561,71 @@ class DangerParser:
                         )
                     ):
                         break
+
+                    # Check if previous line ended with incomplete parenthesis
+                    # (e.g., "word (horri-") - continue to get the rest
+                    if description_lines:
+                        last_line = description_lines[-1]
+                        open_parens = last_line.count("(") - last_line.count(")")
+                        # If we have unclosed parens, always continue regardless of line ending
+                        if open_parens > 0:
+                            # Continue collecting even if it looks odd
+                            pass
+
                     # Add this line to description
                     description_lines.append(next_line)
                     i += 1
 
-                    # Stop after collecting reasonable amount (5 lines should be enough)
-                    if len(description_lines) >= 5:
+                    # Stop after collecting reasonable amount (10 lines should be plenty)
+                    if len(description_lines) >= 10:
                         break
 
                 desc = " ".join(description_lines).strip()
             else:
-                # For simple moves without colons, use the full text as name
-                # Extract just the main part (before parenthetical notes)
+                # For simple moves without colons, collect multi-line as well
+                # Extract just the main part (before parenthetical notes) for the name
+                desc_lines = [text_content]
                 if "(" in name:
                     name = name.split("(")[0].strip()
-                desc = text_content
+
+                # Try to collect continuation lines (for OCR text where descriptions wrap)
+                while i < len(lines):
+                    next_line = lines[i].strip()
+                    if not next_line:
+                        i += 1
+                        continue
+                    # Stop if we hit a new move
+                    if next_line[0] in "•-*¢" or any(
+                        next_line.lower().startswith(kw)
+                        for kw in (
+                            "when ",
+                            "if ",
+                            "get ",
+                            "slam ",
+                            "accelerate",
+                            "takes ",
+                            "rolls ",
+                            "spends",
+                        )
+                    ):
+                        break
+
+                    # Check for unclosed parens from previous line
+                    if desc_lines:
+                        last_line = desc_lines[-1]
+                        open_parens = last_line.count("(") - last_line.count(")")
+                        # If parens are unclosed, continue collecting
+                        if open_parens > 0:
+                            desc_lines.append(next_line)
+                            i += 1
+                            if len(desc_lines) >= 10:
+                                break
+                            continue
+
+                    # Otherwise stop (this line doesn't belong to us)
+                    break
+
+                desc = " ".join(desc_lines).strip()
 
             if name and name.strip():
                 moves.append(
