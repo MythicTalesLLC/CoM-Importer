@@ -102,6 +102,27 @@ class GMMove:
 
 
 @dataclass(frozen=True)
+class CustomAbility:
+    """Represents a custom ability (special rule) for a danger/threat.
+
+    Custom abilities are formatted as **Name:** description in the rulebook.
+    They define special triggered effects or rules unique to the danger.
+    """
+
+    name: str
+    description: str
+    trigger: str = ""  # Optional trigger condition (e.g., "When you...")
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary format for system.customAbilities."""
+        return {
+            "name": self.name,
+            "description": self.description,
+            "trigger": self.trigger,
+        }
+
+
+@dataclass(frozen=True)
 class Spectrum:
     """Represents a status spectrum (dual-axis scale) for dangers."""
 
@@ -212,6 +233,7 @@ class DangerActor:
     finalized: bool = False
     danger_rating: str | None = None
     gm_moves: list[GMMove] = field(default_factory=list)
+    custom_abilities: list[CustomAbility] = field(default_factory=list)
     spectrums: list[Spectrum] = field(default_factory=list)
     tags: list[Tag] = field(default_factory=list)
     statuses: list[DangerStatus] = field(default_factory=list)
@@ -261,6 +283,7 @@ class DangerActor:
                 "is_template": self.is_template,
                 "collective_size": self.collective_size,
                 "finalized": self.finalized,
+                "customAbilities": [ability.to_dict() for ability in self.custom_abilities],
                 "crewThemes": [],
                 "version": "3.0.0",
             },

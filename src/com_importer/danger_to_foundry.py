@@ -60,7 +60,7 @@ class DangerToActorConverter:
 
     def _parse_bracket_syntax(self, danger: DangerActor) -> None:
         """
-        Parse [tag] and [status] syntax in move descriptions.
+        Parse [tag] and [status] syntax in move descriptions and custom abilities.
 
         Extracts referenced tags and statuses for auto-creation.
         Skips tags/statuses that already exist.
@@ -69,6 +69,7 @@ class DangerToActorConverter:
         existing_tag_names = {tag.name.lower() for tag in danger.tags}
         existing_status_names = {status.name.lower() for status in danger.statuses}
 
+        # Parse bracket syntax in GM moves
         for move in danger.gm_moves:
             # Find all bracketed references
             for match in re.finditer(self.BRACKET_PATTERN, move.description):
@@ -91,6 +92,37 @@ class DangerToActorConverter:
                         danger.statuses.append(status)
                 else:
                     # Treat as tag
+                    if (
+                        bracket_content.lower() not in existing_tag_names
+                        and bracket_content not in self.created_tags
+                    ):
+                        self.created_tags.add(bracket_content)
+                        existing_tag_names.add(bracket_content.lower())
+                        tag_type = self._infer_tag_type(bracket_content)
+                        tag = Tag(
+                            name=bracket_content,
+                            tag_type=tag_type,
+                        )
+                        danger.tags.append(tag)
+
+        # Parse bracket syntax in custom abilities
+        for ability in danger.custom_abilities:
+            for match in re.finditer(self.BRACKET_PATTERN, ability.description):
+                bracket_content = match.group(1).strip()
+
+                if self._looks_like_status(bracket_content):
+                    if (
+                        bracket_content.lower() not in existing_status_names
+                        and bracket_content not in self.created_statuses
+                    ):
+                        self.created_statuses.add(bracket_content)
+                        existing_status_names.add(bracket_content.lower())
+                        status = DangerStatus(
+                            name=bracket_content,
+                            category=StatusCategory.NONE,
+                        )
+                        danger.statuses.append(status)
+                else:
                     if (
                         bracket_content.lower() not in existing_tag_names
                         and bracket_content not in self.created_tags

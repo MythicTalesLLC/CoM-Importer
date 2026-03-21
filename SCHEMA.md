@@ -174,9 +174,12 @@ IF custom done → THEN bullet moves list (end of entry)
 - Name extraction with OCR cleanup
 - Description extraction
 - Tag auto-generation
+- Bracket syntax parsing for tags/statuses
+- Custom abilities (extracted to separate customAbilities array)
+- Hard/soft move classification
+- Item sorting (hard → soft → custom → spectrum → tag)
 
 ### ⚠️ Partial:
-- Custom abilities (extracted as custom moves, not separate)
 - Collective fields (not yet extracted)
 - Effect flags (createDanger, optional, etc.)
 

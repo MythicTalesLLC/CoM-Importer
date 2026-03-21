@@ -334,7 +334,7 @@ class ExportResultDialog(QDialog):
         layout = QVBoxLayout(self)
 
         # Title
-        title = QLabel("✓ Export Complete - REST API Limitation Workaround")
+        title = QLabel("✓ Export Complete - Ready for Foundry Import")
         title.setStyleSheet("font-size: 14px; font-weight: bold; color: #2e7d32;")
         layout.addWidget(title)
 
@@ -342,18 +342,14 @@ class ExportResultDialog(QDialog):
         explanation = QPlainTextEdit()
         explanation.setReadOnly(True)
         explanation.setPlainText(
-            f"""WHAT HAPPENED:
-Your threat actor was successfully created in Foundry, but due to REST API
-limitations, the items (GM moves, spectrums, tags, statuses) could not be
-linked via the remote API.
-
-SOLUTION - AUTOMATIC EXPORT:
-Your complete actor JSON with all {self.items_count} items has been automatically
-exported and is ready to import.
+            f"""EXPORT COMPLETE:
+Your actor has been successfully processed and exported with all items.
 
 ACTOR: {self.actor_name}
 ITEMS: {self.items_count} (moves, spectrums, tags)
-FILE: {self.export_path}"""
+FILE: {self.export_path}
+
+NEXT: Use the macro to import into Foundry (see instructions below)."""
         )
         explanation.setStyleSheet(
             "background-color: #f5f5f5; padding: 10px; border: 1px solid #ddd; border-radius: 4px;"

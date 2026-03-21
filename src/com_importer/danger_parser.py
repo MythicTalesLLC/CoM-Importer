@@ -10,6 +10,7 @@ import re
 from dataclasses import dataclass
 
 from .com_schema import (
+    CustomAbility,
     DangerActor,
     DangerStatus,
     GMMove,
@@ -96,7 +97,7 @@ class DangerParser:
 
         # Extract structured elements
         spectrums = self._extract_spectrums(text)
-        gm_moves = self._extract_moves(text)
+        gm_moves, custom_abilities = self._extract_moves(text)
         tags = self._extract_tags_from_text(text)
         statuses = self._extract_statuses(text)
 
@@ -108,6 +109,7 @@ class DangerParser:
             description=description,
             danger_rating=danger_rating,
             gm_moves=gm_moves,
+            custom_abilities=custom_abilities,
             spectrums=spectrums,
             tags=tags,
             statuses=statuses,
@@ -356,9 +358,14 @@ class DangerParser:
 
         return spectrums
 
-    def _extract_moves(self, text: str) -> list[GMMove]:
-        """Extract GM moves from text."""
+    def _extract_moves(self, text: str) -> tuple[list[GMMove], list[CustomAbility]]:
+        """Extract GM moves and custom abilities from text.
+
+        Returns:
+            Tuple of (gm_moves, custom_abilities)
+        """
         moves = []
+        custom_abilities = []
 
         # Check if text contains OCR bullet artifacts (¢) - if so, skip section-based extraction
         # OCR'd text usually doesn't have explicit "Hard Moves:" sections, just bullet points
@@ -371,21 +378,22 @@ class DangerParser:
             moves.extend(hard_moves)
             moves.extend(soft_moves)
 
-        # Extract custom moves from bullet points
-        custom_moves = self._extract_custom_moves(text)
+        # Extract custom moves and custom abilities from bullet points
+        custom_moves, custom_abs = self._extract_custom_moves(text)
 
         moves.extend(custom_moves)
+        custom_abilities.extend(custom_abs)
 
-        if not moves:
+        if not moves and not custom_abilities:
             self.errors.append(
                 ParsingError(
                     "moves",
-                    "No GM moves found; add some moves manually",
+                    "No GM moves or custom abilities found; add some manually",
                     "warning",
                 )
             )
 
-        return moves
+        return moves, custom_abilities
 
     def _extract_moves_by_type(
         self,
@@ -446,16 +454,19 @@ class DangerParser:
 
         return moves
 
-    def _extract_custom_moves(self, text: str) -> list[GMMove]:
-        """Extract custom moves from bullet points with multi-line descriptions.
+    def _extract_custom_moves(self, text: str) -> tuple[list[GMMove], list[CustomAbility]]:
+        """Extract custom moves and abilities from bullet points with multi-line descriptions.
 
         Captures both:
-        - Conditional moves: "When X happens, Y" or "If condition: action"
-        - Simple moves/abilities: "Get someone to like her (friendly-2)"
-        - Moves marked with "(hard move)" or "(soft move)"
+        - GM Moves (hard/soft): Bullet points with actions
+        - Custom Abilities: **Name:** blocks (special rules)
         Continues reading lines after move name to capture full descriptions.
+
+        Returns:
+            Tuple of (gm_moves, custom_abilities)
         """
         moves = []
+        custom_abilities = []
         seen_names = set()
 
         # Look for all potential move lines
@@ -636,16 +647,32 @@ class DangerParser:
             if name and name.strip():
                 # Clean up bold markers (** or __) from name
                 cleaned_name = name.strip().replace("**", "").replace("__", "").strip()
-                moves.append(
-                    GMMove(
-                        name=cleaned_name,
-                        description=(desc.strip() if desc.strip() else cleaned_name),
-                        move_type=move_type,
+
+                # Separate custom abilities from GM moves
+                if move_type == MoveType.CUSTOM and text_content.startswith("**"):
+                    # This is a custom ability - extract trigger if present
+                    trigger = ""
+                    if desc and desc.lower().startswith("when "):
+                        trigger = desc.split(".")[0] if "." in desc else desc
+                    custom_abilities.append(
+                        CustomAbility(
+                            name=cleaned_name,
+                            description=(desc.strip() if desc.strip() else cleaned_name),
+                            trigger=trigger,
+                        )
                     )
-                )
+                else:
+                    # This is a GM move (hard or soft)
+                    moves.append(
+                        GMMove(
+                            name=cleaned_name,
+                            description=(desc.strip() if desc.strip() else cleaned_name),
+                            move_type=move_type,
+                        )
+                    )
                 seen_names.add(text_content.lower())
 
-        return moves
+        return moves, custom_abilities
 
     def _extract_tags_from_text(self, text: str) -> list[Tag]:
         """Extract tags mentioned in brackets [tag-name] and auto-generate from text."""

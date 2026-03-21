@@ -212,13 +212,9 @@ class SingleImportTab(QWidget):
         preview_button.clicked.connect(self._show_preview)
         button_layout.addWidget(preview_button)
 
-        create_button = QPushButton("Create in Foundry")
-        create_button.clicked.connect(self._create_actor)
-        button_layout.addWidget(create_button)
-
-        save_button = QPushButton("Save as Draft")
-        save_button.clicked.connect(self._save_draft)
-        button_layout.addWidget(save_button)
+        export_button = QPushButton("Export JSON + Macro")
+        export_button.clicked.connect(self._export_json)
+        button_layout.addWidget(export_button)
 
         layout.addLayout(button_layout)
 
@@ -290,19 +286,6 @@ class SingleImportTab(QWidget):
             f"Auto-detected: {detected_type} "
             f"(danger: {threat_conf:.0%}, character: {char_conf:.0%})"
         )
-
-    def _select_image(self) -> None:
-        """Select an image file and OCR it (legacy method)."""
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Select Image",
-            str(Path.home() / "Downloads"),
-            "Image Files (*.png *.jpg *.jpeg *.bmp *.gif);;All Files (*)",
-        )
-        if not file_path:
-            return
-
-        self._process_image(file_path)
 
     def _process_image(self, file_path: str) -> None:
         """Process image file with OCR and populate text field."""
@@ -552,88 +535,52 @@ class SingleImportTab(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to generate preview:\n{str(e)}")
 
-    def _create_actor(self) -> None:
-        """Create actor in Foundry."""
+    def _export_json(self) -> None:
+        """Export actor as JSON file with import macro."""
         if not hasattr(self, "current_actor") or not self.current_actor:
             QMessageBox.warning(self, "No Import Parsed", "Please parse text first.")
             return
 
-        if not hasattr(self, "foundry_client") or not self.foundry_client:
-            QMessageBox.warning(
-                self,
-                "Not Configured",
-                "Please configure Foundry connection in the Configuration tab first.",
-            )
-            return
-
         try:
-            # Show progress
-            progress = QMessageBox(self)
-            progress.setWindowTitle("Creating...")
-            actor_label = "Danger" if self.current_actor_type == "threat" else "Character"
-            progress.setText(f"Creating {actor_label} in Foundry...")
-            progress.setStandardButtons(QMessageBox.StandardButton.NoButton)
-            progress.show()
-
             # Convert to Foundry format
             if self.current_actor_type == "threat":
                 from ...danger_to_foundry import convert_danger_to_foundry
 
-                # Log what's in the actor before conversion
-                print(f"\n[CONVERT] About to convert threat actor: {self.current_actor.name}")
-                print(f"[CONVERT]   - GM Moves: {len(self.current_actor.gm_moves)}")
-                print(f"[CONVERT]   - Spectrums: {len(self.current_actor.spectrums)}")
-                print(f"[CONVERT]   - Tags: {len(self.current_actor.tags)}")
-                print(f"[CONVERT]   - Statuses: {len(self.current_actor.statuses)}")
-
                 actor_json = convert_danger_to_foundry(self.current_actor)
-
-                # Log what came out of the converter
-                print("[CONVERT] After conversion:")
-                print(f"[CONVERT]   - Items in JSON: {len(actor_json.get('items', []))}")
+                actor_label = "Danger"
             else:
                 from ...character_to_foundry import convert_character_to_foundry
 
                 actor_json = convert_character_to_foundry(self.current_actor)
+                actor_label = "Character"
 
-            # Create in Foundry
-            actor_id = self.foundry_client.create_actor(actor_json)
+            # Export to file
+            from ...foundry_export import FoundryJsonExporter
 
-            progress.close()
+            export_path = FoundryJsonExporter.export_actor_to_file(actor_json, export_macro=True)
 
-            # Notify history to add entry
+            # Show result dialog
+            items_count = len(actor_json.get("items", []))
+
+            from ..dialogs import ExportResultDialog
+
+            export_dialog = ExportResultDialog(
+                export_path=export_path,
+                actor_name=self.current_actor.name,
+                items_count=items_count,
+                parent=self,
+            )
+            export_dialog.exec()
+
+            # Notify history if callback exists
             if hasattr(self, "history_callback"):
                 self.history_callback(
-                    actor_id=actor_id,
+                    actor_id=actor_json.get("_id", "exported"),
                     danger_name=self.current_actor.name,
                     actor_json=actor_json,
                     danger_rating=getattr(self.current_actor, "danger_rating", None),
                     source="text",
-                    status="success",
-                )
-
-            # Check if export fallback occurred
-            if (
-                hasattr(self.foundry_client, "last_export_path")
-                and self.foundry_client.last_export_path
-            ):
-                from ..dialogs import ExportResultDialog
-
-                export_dialog = ExportResultDialog(
-                    export_path=self.foundry_client.last_export_path,
-                    actor_name=self.current_actor.name,
-                    items_count=self.foundry_client.last_export_items_count,
-                    parent=self,
-                )
-                export_dialog.exec()
-                # Clear the export tracker
-                self.foundry_client.last_export_path = None
-                self.foundry_client.last_export_items_count = 0
-            else:
-                QMessageBox.information(
-                    self,
-                    "Success",
-                    f"{actor_label} created in Foundry!\n\nActor ID: {actor_id}",
+                    status="exported",
                 )
 
             # Clear and reset
@@ -644,53 +591,10 @@ class SingleImportTab(QWidget):
         except Exception as e:
             QMessageBox.critical(
                 self,
-                "Error",
-                f"Failed to create {actor_label.lower()} in Foundry:\n{str(e)}",
+                "Export Error",
+                f"Failed to export {actor_label.lower()}:\n{str(e)}",
             )
-            logger.exception("Failed to create actor")
-
-    def _save_draft(self) -> None:
-        """Save parsed actor as draft JSON file."""
-        if not hasattr(self, "current_actor") or not self.current_actor:
-            QMessageBox.warning(self, "No Import Parsed", "Please parse text first.")
-            return
-
-        import json
-
-        actor_label = "Danger" if self.current_actor_type == "threat" else "Character"
-        file_path, _ = QFileDialog.getSaveFileName(
-            self,
-            f"Save {actor_label} as JSON",
-            f"{self.current_actor.name.replace(' ', '_')}_draft.json",
-            "JSON Files (*.json)",
-        )
-
-        if not file_path:
-            return
-
-        try:
-            if self.current_actor_type == "threat":
-                from ...danger_to_foundry import convert_danger_to_foundry
-
-                actor_json = convert_danger_to_foundry(self.current_actor)
-            else:
-                from ...character_to_foundry import convert_character_to_foundry
-
-                actor_json = convert_character_to_foundry(self.current_actor)
-
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(actor_json, f, indent=2, ensure_ascii=False)
-            QMessageBox.information(
-                self,
-                "Draft Saved",
-                f"{actor_label} saved to:\n{file_path}",
-            )
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to save draft:\n{str(e)}")
-
-    def set_foundry_client(self, client):
-        """Set the Foundry client."""
-        self.foundry_client = client
+            logger.exception("Failed to export actor")
 
     def set_history_callback(self, callback):
         """Set the callback for history updates."""
