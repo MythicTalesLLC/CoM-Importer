@@ -128,14 +128,45 @@ class DangerParser:
             line = line.strip()
             if line and not line.startswith("•") and len(line) < 100:
                 # First substantial line that isn't a bullet
-                return line
+                name = line
+                # Remove stars (★ and ⭐) which represent danger level
+                name = re.sub(r"[★⭐]+\s*", "", name).strip()
+                # Remove trailing garbage like "kk *&" by keeping only reasonable characters
+                # Keep only: letters, numbers, spaces, hyphens, apostrophes
+                cleaned = re.sub(r"[^a-zA-Z0-9\s\-'].*$", "", name).strip()
+                if cleaned:
+                    name = cleaned
+                # Threat names are typically 1-3 words - remove trailing short garbage words
+                words = name.split()
+                # If last word is short (len < 3) and all lowercase, it's likely OCR garbage
+                while words and len(words[-1]) < 3 and words[-1].islower():
+                    words.pop()
+                if words:
+                    name = " ".join(words)
+                return name if name else line
         return "Untitled Danger"
 
     def _extract_danger_rating(self, text: str) -> str | None:
-        """Extract danger rating if present."""
+        """Extract danger rating if present.
+
+        Looks for:
+        - "Rating 3" or "Danger Rating: 3"
+        - Stars: ★★★ or ⭐⭐⭐ (count them)
+        """
+        # First try the standard pattern
         match = re.search(self.DANGER_RATING_PATTERN, text, re.IGNORECASE)
         if match:
             return match.group(1)
+
+        # Try to count stars in the first line (danger level indicator)
+        lines = text.split("\n")
+        if lines:
+            first_line = lines[0]
+            # Count filled stars
+            star_count = first_line.count("★") + first_line.count("⭐")
+            if star_count > 0:
+                return str(star_count)
+
         return None
 
     def _extract_mythos(self, text: str) -> str:
@@ -318,13 +349,20 @@ class DangerParser:
         """Extract GM moves from text."""
         moves = []
 
-        # Split on move markers
-        hard_moves = self._extract_moves_by_type(text, self.HARD_MOVE_PATTERN, MoveType.HARD)
-        soft_moves = self._extract_moves_by_type(text, self.SOFT_MOVE_PATTERN, MoveType.SOFT)
+        # Check if text contains OCR bullet artifacts (¢) - if so, skip section-based extraction
+        # OCR'd text usually doesn't have explicit "Hard Moves:" sections, just bullet points
+        has_ocr_bullets = "¢" in text
+
+        # Extract hard/soft moves by type only if this isn't OCR'd text
+        if not has_ocr_bullets:
+            hard_moves = self._extract_moves_by_type(text, self.HARD_MOVE_PATTERN, MoveType.HARD)
+            soft_moves = self._extract_moves_by_type(text, self.SOFT_MOVE_PATTERN, MoveType.SOFT)
+            moves.extend(hard_moves)
+            moves.extend(soft_moves)
+
+        # Extract custom moves from bullet points
         custom_moves = self._extract_custom_moves(text)
 
-        moves.extend(hard_moves)
-        moves.extend(soft_moves)
         moves.extend(custom_moves)
 
         if not moves:
@@ -346,7 +384,8 @@ class DangerParser:
     ) -> list[GMMove]:
         """Extract moves matching a specific type pattern.
 
-        Filters out false positives from patterns found inside parentheses.
+        Filters out false positives from patterns found inside parentheses or descriptions.
+        Only matches patterns that appear at/near the start of a line (after bullets).
         """
         moves = []
 
@@ -355,14 +394,26 @@ class DangerParser:
             start_pos = match.start()
 
             # Check if this match is inside parentheses - if so, skip it
-            # Count open/close parens before match
             before_match = text[:start_pos]
             open_parens = before_match.count("(") - before_match.count(")")
             if open_parens > 0:
-                # We're inside parentheses, skip this match
                 continue
 
-            end_pos = start_pos + 300  # Grab next 300 chars
+            # Require the match to be at the start of a line (after bullets/whitespace only)
+            # OR be in the first few positions of a line before more text
+            line_start = before_match.rfind("\n") + 1
+            text_before_on_line = before_match[line_start:]
+
+            # The text before should be empty, whitespace, or just bullet chars
+            # Don't match if there's significant text before the pattern on the line
+            if text_before_on_line:
+                # Check if it's only bullets/whitespace
+                non_bullet_text = re.sub(r"[•\-*¢\s\t]", "", text_before_on_line)
+                if non_bullet_text:
+                    # There's actual text before the pattern, skip it
+                    continue
+
+            end_pos = start_pos + 300
 
             # Find the move text
             move_text = text[start_pos : min(end_pos, len(text))]
