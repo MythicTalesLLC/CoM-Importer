@@ -106,7 +106,7 @@ class Spectrum:
     """Represents a status spectrum (dual-axis scale) for dangers."""
 
     name: str
-    max_tier: int = 4  # Typical spectrum max, can vary
+    max_tier: int | None = 4  # Typical spectrum max, can vary; None = immune/unlimited
     current_tier: int = 0
     pips: int = 0
 

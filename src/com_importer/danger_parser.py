@@ -314,43 +314,45 @@ class DangerParser:
 
             # Try to add spectrum 1 if we have a name
             if name1.lower() not in seen_spectrum_names and len(name1) < 50:
-                value1_str = (
-                    self._correct_ocr_digit(value1_raw)
-                    if value1_raw.strip() and value1_raw != "-"
-                    else "1"
+                # Dash means immune/unlimited (None/null in JSON)
+                if value1_raw.strip() and value1_raw != "-":
+                    value1_str = self._correct_ocr_digit(value1_raw)
+                    try:
+                        current1 = int(value1_str)
+                    except ValueError:
+                        current1 = None
+                else:
+                    current1 = None
+
+                spectrum1 = Spectrum(
+                    name=name1,
+                    max_tier=current1,
+                    current_tier=current1 if current1 is not None else 0,
+                    pips=0,
                 )
-                try:
-                    current1 = int(value1_str)
-                    spectrum1 = Spectrum(
-                        name=name1,
-                        max_tier=current1,
-                        current_tier=current1,
-                        pips=0,
-                    )
-                    spectrums.append(spectrum1)
-                    seen_spectrum_names.add(name1.lower())
-                except ValueError:
-                    pass
+                spectrums.append(spectrum1)
+                seen_spectrum_names.add(name1.lower())
 
             # Try to add spectrum 2 if we have a name
             if name2.lower() not in seen_spectrum_names and len(name2) < 50:
-                value2_str = (
-                    self._correct_ocr_digit(value2_raw)
-                    if value2_raw.strip() and value2_raw != "-"
-                    else "1"
+                # Dash means immune/unlimited (None/null in JSON)
+                if value2_raw.strip() and value2_raw != "-":
+                    value2_str = self._correct_ocr_digit(value2_raw)
+                    try:
+                        current2 = int(value2_str)
+                    except ValueError:
+                        current2 = None
+                else:
+                    current2 = None
+
+                spectrum2 = Spectrum(
+                    name=name2,
+                    max_tier=current2,
+                    current_tier=current2 if current2 is not None else 0,
+                    pips=0,
                 )
-                try:
-                    current2 = int(value2_str)
-                    spectrum2 = Spectrum(
-                        name=name2,
-                        max_tier=current2,
-                        current_tier=current2,
-                        pips=0,
-                    )
-                    spectrums.append(spectrum2)
-                    seen_spectrum_names.add(name2.lower())
-                except ValueError:
-                    pass
+                spectrums.append(spectrum2)
+                seen_spectrum_names.add(name2.lower())
 
         return spectrums
 
@@ -471,14 +473,18 @@ class DangerParser:
                 continue
 
             # Check if line is a potential move by looking for:
-            # 1. Bullet points (•, -, *)
-            # 2. Lines containing "(hard/soft move)" markers
-            # 3. Lines starting with move keywords
+            # 1. Custom abilities: **NAME:** blocks
+            # 2. Bullet points (•, -, *)
+            # 3. Lines containing "(hard/soft move)" markers
+            # 4. Lines starting with move keywords
             is_potential_move = False
 
+            # Check for custom abilities first (before stripping bullets)
+            if line.startswith("**") and ":" in line:
+                text_content = line
+                is_potential_move = True
             # Strip common bullet characters if present (including OCR variants like ¢)
-            text_content = line
-            if line and line[0] in "•-*¢":
+            elif line and line[0] in "•-*¢":
                 text_content = line.lstrip("•-*¢ ").strip()
                 is_potential_move = True
             elif "(hard move)" in line.lower() or "(soft move)" in line.lower():
@@ -507,58 +513,22 @@ class DangerParser:
             if text_content.lower() in seen_names:
                 continue
 
-            # Determine move type based on content and formatting
-            # Logic:
-            # - If move contains a status tag (injured-3, etc) and NOT bolded → HARD
-            # - If move is NOT bolded AND has NO tag → SOFT
-            # - Otherwise (including bolded moves) → CUSTOM
-            move_type = MoveType.CUSTOM
+            # Determine move type based on schema rules:
+            # - Contains "(hard move)" → HARD
+            # - Starts with **NAME:** → CUSTOM (custom ability)
+            # - Otherwise (bullet point) → SOFT
+            move_type = MoveType.SOFT  # Default for bullets
 
-            # Check for explicit move type markers first
+            # Check for explicit "(hard move)" marker
             if "(hard move)" in text_content.lower():
                 move_type = MoveType.HARD
                 name = text_content.replace("(hard move)", "").replace("(Hard Move)", "").strip()
-            elif "(soft move)" in text_content.lower():
-                move_type = MoveType.SOFT
-                name = text_content.replace("(soft move)", "").replace("(Soft Move)", "").strip()
-            else:
-                # No explicit markers, infer from formatting and content
+            # Check if it's a custom ability (bold block with colon)
+            elif text_content.startswith("**") and ":" in text_content:
+                move_type = MoveType.CUSTOM
                 name = text_content
-
-                # Check if this line has a status tag (e.g., injured-3, bleeding-2)
-                has_status_tag = bool(re.search(r"\w+-\d", text_content))
-
-                # Check if name might be bolded in OCR (**name** or similar)
-                # Bold might show as ** or __ in OCR markdown
-                is_bolded = (
-                    text_content.startswith("**")
-                    or text_content.startswith("__")
-                    or "**" in text_content
-                    or "__" in text_content
-                )
-
-                # Infer move type:
-                # Hard move: has tag, not bolded, no condition keywords
-                if (
-                    has_status_tag
-                    and not is_bolded
-                    and not any(
-                        word in text_content.lower() for word in self.MOVE_CONDITION_KEYWORDS
-                    )
-                ):
-                    move_type = MoveType.HARD
-                # Soft move: no tag, not bolded, no condition keywords
-                elif (
-                    not has_status_tag
-                    and not is_bolded
-                    and not any(
-                        word in text_content.lower() for word in self.MOVE_CONDITION_KEYWORDS
-                    )
-                ):
-                    move_type = MoveType.SOFT
-                # Custom otherwise (bolded, or has condition keywords)
-                else:
-                    move_type = MoveType.CUSTOM
+            else:
+                name = text_content
 
             # If there's a colon, split into name and description
             if ":" in text_content:
@@ -664,32 +634,6 @@ class DangerParser:
                 desc = " ".join(desc_lines).strip()
 
             if name and name.strip():
-                # Re-evaluate move type now that we have the full description
-                # (in case status tags were split across OCR lines)
-                full_text_for_type_check = f"{text_content} {desc}"
-                has_status_tag = bool(re.search(r"\w+-\d", full_text_for_type_check))
-                is_bolded = "**" in text_content or "__" in text_content
-
-                # Re-infer if not explicitly marked
-                if move_type == MoveType.CUSTOM or move_type == MoveType.SOFT:
-                    # Check based on full text
-                    if (
-                        has_status_tag
-                        and not is_bolded
-                        and not any(
-                            word in text_content.lower() for word in self.MOVE_CONDITION_KEYWORDS
-                        )
-                    ):
-                        move_type = MoveType.HARD
-                    elif (
-                        not has_status_tag
-                        and not is_bolded
-                        and not any(
-                            word in text_content.lower() for word in self.MOVE_CONDITION_KEYWORDS
-                        )
-                    ):
-                        move_type = MoveType.SOFT
-
                 # Clean up bold markers (** or __) from name
                 cleaned_name = name.strip().replace("**", "").replace("__", "").strip()
                 moves.append(
