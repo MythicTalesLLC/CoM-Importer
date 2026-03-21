@@ -105,9 +105,8 @@ class FoundryRestClient(FoundryClient):
         """
         Create a new actor in Foundry via REST API.
 
-        For REST API, we simplify the actor data to just essential fields
-        to avoid serialization issues with the relay, then update with
-        additional fields after creation.
+        Creates actor with name, type, and system fields in initial creation.
+        Items (spectrums, moves, tags) are added after creation via /create endpoint.
 
         Args:
             actor_data: Foundry actor object
@@ -118,22 +117,25 @@ class FoundryRestClient(FoundryClient):
         Raises:
             Exception: If creation fails
         """
-        # Simplify actor data for REST API compatibility
-        # Only send essential fields - let Foundry fill in defaults
-        simplified_actor = {
+        # Build actor data for creation - include system fields
+        create_actor_data = {
             "name": actor_data.get("name", "New Actor"),
             "type": actor_data.get("type", "threat"),
         }
 
-        # Add optional fields if present and non-empty
+        # Add img if present
         if actor_data.get("img"):
-            simplified_actor["img"] = actor_data["img"]
+            create_actor_data["img"] = actor_data["img"]
+
+        # Add system fields (description, mythos, logos, etc.)
+        if actor_data.get("system"):
+            create_actor_data["system"] = actor_data["system"]
 
         endpoint = urljoin(self.api_url, f"/create?clientId={self.client_id}")
         payload = {
             "entityType": "Actor",
             "collection": "actors",
-            "data": simplified_actor,
+            "data": create_actor_data,
         }
         response = self.session.post(endpoint, json=payload, timeout=30)
         if response.status_code not in (200, 201):
@@ -145,24 +147,13 @@ class FoundryRestClient(FoundryClient):
         entity = result.get("entity", {})
         actor_id = entity.get("_id", result.get("_id", result.get("id", "")))
 
-        # Now update with additional details
-        if actor_id:
-            update_data = {}
-
-            # Add system field updates
-            if actor_data.get("system"):
-                update_data["system"] = actor_data["system"]
-
-            # Add items if present
-            if actor_data.get("items"):
-                update_data["items"] = actor_data["items"]
-
-            # Only update if we have additional data
-            if update_data:
+        # Add items (spectrums, moves, tags, etc.) after creation
+        if actor_id and actor_data.get("items"):
+            for item_data in actor_data["items"]:
                 try:
-                    self.update_actor(actor_id, update_data)
+                    self.add_item_to_actor(actor_id, item_data)
                 except Exception:
-                    # Log update error but don't fail - actor was created
+                    # Log but don't fail - actor was created
                     pass
 
         return actor_id
