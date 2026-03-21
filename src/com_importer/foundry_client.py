@@ -81,10 +81,18 @@ class FoundryRestClient(FoundryClient):
             response = self.session.get(endpoint, timeout=10)
 
             if response.status_code == 200:
-                clients = response.json()
-                if isinstance(clients, list) and len(clients) > 0:
-                    return True, f"Connected. Found {len(clients)} Foundry client(s)"
-                return True, "API relay responding (no clients connected yet)"
+                data = response.json()
+                # Response is a dict with "total" and "clients" keys
+                if isinstance(data, dict):
+                    total = data.get("total", 0)
+                    clients = data.get("clients", [])
+                    if total > 0 and len(clients) > 0:
+                        world = clients[0].get("worldTitle", "Unknown")
+                        return True, f"Connected to '{world}' ({total} client(s))"
+                    return True, "API relay responding (no clients connected yet)"
+                # Fallback for alternative response formats
+                if isinstance(data, list) and len(data) > 0:
+                    return True, f"Connected. Found {len(data)} Foundry client(s)"
 
             if response.status_code == 401:
                 return False, "Authentication failed: Invalid API key"
