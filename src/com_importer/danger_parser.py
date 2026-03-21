@@ -41,8 +41,13 @@ class DangerParser:
     SOFT_MOVE_PATTERN = r"soft\s+(?:danger\s+)?move|soft\s+(?:move|option)"
     CUSTOM_MOVE_PATTERN = r"custom\s+move|when\s+.*?:"
 
+    # Condition keywords that indicate a move is triggered by conditions
+    MOVE_CONDITION_KEYWORDS = ("when", "if", "whenever", "each", "at the end", "at the start")
+
     # Pattern to detect spectrum entries (e.g., "Hurt: 0/4", "Health: 1/5")
     SPECTRUM_PATTERN = r"([\w\s]+?):\s*(\d+)/(\d+)"  # "Name: current/max" format
+    # Alternative pattern for "GET INTO TROUBLE X / HURT OR SUBDUE Y" format
+    SPECTRUM_ALT_PATTERN = r"([A-Z][A-Z\s]+?)\s+(\d+)\s*/\s*([A-Z][A-Z\s]+?)\s+(\d+)"
 
     # Pattern for tags in brackets
     TAG_PATTERN = r"\[([^\]]+)\]"
@@ -182,8 +187,14 @@ class DangerParser:
         return "\n".join(description_lines).strip()
 
     def _extract_spectrums(self, text: str) -> list[Spectrum]:
-        """Extract spectrums from text."""
+        """Extract spectrums from text.
+
+        Handles both formats:
+        - Standard: "Name: current/max" (e.g., "Health: 2/4")
+        - Alternative: "NAME X / NAME Y" (e.g., "GET INTO TROUBLE 3 / HURT OR SUBDUE 2")
+        """
         spectrums = []
+        seen_spectrum_names = set()
 
         # Look for "Spectrum:" or "Status Spectrum:" sections
         spectrum_section = re.search(
@@ -196,17 +207,22 @@ class DangerParser:
         else:
             spectrum_text = text
 
-        # Find all patterns like "Name: current/max" or "Name: max"
+        # Try standard pattern first: "Name: current/max"
         for match in re.finditer(self.SPECTRUM_PATTERN, spectrum_text):
             name = match.group(1).strip()
             current = int(match.group(2))
             max_tier = int(match.group(3))
 
-            # Filter out false positives (very long names, etc.)
-            if len(name) < 50 and name.lower() not in {
-                "description",
-                "biology",
-            }:
+            # Filter out false positives
+            if (
+                len(name) < 50
+                and name.lower()
+                not in {
+                    "description",
+                    "biology",
+                }
+                and name.lower() not in seen_spectrum_names
+            ):
                 spectrum = Spectrum(
                     name=name,
                     max_tier=max_tier,
@@ -214,6 +230,39 @@ class DangerParser:
                     pips=0,
                 )
                 spectrums.append(spectrum)
+                seen_spectrum_names.add(name.lower())
+
+        # Try alternative pattern: "GET INTO TROUBLE 3 / HURT OR SUBDUE 2"
+        # Look for all cap phrases with numbers separated by /
+        alt_patterns = re.findall(
+            r"([A-Z][A-Z\s]+?)\s+(\d+)\s*/\s*([A-Z][A-Z\s]+?)\s+(\d+)", spectrum_text
+        )
+        for match in alt_patterns:
+            name1 = match[0].strip()
+            current1 = int(match[1])
+            name2 = match[2].strip()
+            current2 = int(match[3])
+
+            # Add both as separate spectrums
+            if name1.lower() not in seen_spectrum_names and len(name1) < 50:
+                spectrum1 = Spectrum(
+                    name=name1,
+                    max_tier=3,  # Default to 3 for these types
+                    current_tier=current1,
+                    pips=0,
+                )
+                spectrums.append(spectrum1)
+                seen_spectrum_names.add(name1.lower())
+
+            if name2.lower() not in seen_spectrum_names and len(name2) < 50:
+                spectrum2 = Spectrum(
+                    name=name2,
+                    max_tier=3,  # Default to 3 for these types
+                    current_tier=current2,
+                    pips=0,
+                )
+                spectrums.append(spectrum2)
+                seen_spectrum_names.add(name2.lower())
 
         return spectrums
 
@@ -247,12 +296,24 @@ class DangerParser:
         type_pattern: str,
         move_type: MoveType,
     ) -> list[GMMove]:
-        """Extract moves matching a specific type pattern."""
+        """Extract moves matching a specific type pattern.
+
+        Filters out false positives from patterns found inside parentheses.
+        """
         moves = []
 
         # Find all occurrences of the type pattern
         for match in re.finditer(type_pattern, text, re.IGNORECASE):
             start_pos = match.start()
+
+            # Check if this match is inside parentheses - if so, skip it
+            # Count open/close parens before match
+            before_match = text[:start_pos]
+            open_parens = before_match.count("(") - before_match.count(")")
+            if open_parens > 0:
+                # We're inside parentheses, skip this match
+                continue
+
             end_pos = start_pos + 300  # Grab next 300 chars
 
             # Find the move text
@@ -263,7 +324,8 @@ class DangerParser:
             name = lines[0].replace(" Move", "").strip()
             description = " ".join(lines[1:]).strip()
 
-            if name and description:
+            # Filter out very short names which are likely false positives
+            if name and len(name) > 3 and description and len(description) > 5:
                 moves.append(
                     GMMove(
                         name=name,
@@ -275,32 +337,64 @@ class DangerParser:
         return moves
 
     def _extract_custom_moves(self, text: str) -> list[GMMove]:
-        """Extract custom moves (usually triggered by conditions)."""
-        moves = []
+        """Extract custom moves from bullet points.
 
-        # Look for bullet points with conditions
+        Captures both:
+        - Conditional moves: "When X happens, Y" or "If condition: action"
+        - Simple moves/abilities: "Get someone to like her (friendly-2)"
+        """
+        moves = []
+        seen_names = set()
+
+        # Look for all bullet points
         lines = text.split("\n")
         for _i, line in enumerate(lines):
             if line.strip().startswith("•") or line.strip().startswith("-"):
                 text_content = line.lstrip("•-").strip()
 
-                # Check if it has a condition (contains "when", "if", ":", etc.)
-                if any(word in text_content.lower() for word in ("when", "if", "whenever", "each")):
-                    # Try to extract name and description
-                    if ":" in text_content:
-                        name, desc = text_content.split(":", 1)
-                    else:
-                        name = text_content[:50]
-                        desc = text_content
+                if not text_content:
+                    continue
 
-                    if name.strip():
-                        moves.append(
-                            GMMove(
-                                name=name.strip(),
-                                description=desc.strip(),
-                                move_type=MoveType.CUSTOM,
-                            )
+                # Skip if we've already added this
+                if text_content.lower() in seen_names:
+                    continue
+
+                # Determine if this is a hard move, soft move, or custom move
+                move_type = MoveType.CUSTOM
+                if "(hard move)" in text_content.lower():
+                    move_type = MoveType.HARD
+                    name = text_content.replace("(hard move)", "").strip()
+                elif "(soft move)" in text_content.lower():
+                    move_type = MoveType.SOFT
+                    name = text_content.replace("(soft move)", "").strip()
+                else:
+                    # Check for condition keywords
+                    if any(word in text_content.lower() for word in self.MOVE_CONDITION_KEYWORDS):
+                        move_type = MoveType.CUSTOM
+
+                    name = text_content
+
+                # If there's a condition or colon, split into name and description
+                if ":" in text_content:
+                    name, desc = text_content.split(":", 1)
+                    name = name.strip()
+                    desc = desc.strip()
+                else:
+                    # For simple moves without colons, use the full text as name
+                    # Extract just the main part (before parenthetical notes)
+                    if "(" in name:
+                        name = name.split("(")[0].strip()
+                    desc = text_content
+
+                if name and name.strip():
+                    moves.append(
+                        GMMove(
+                            name=name.strip(),
+                            description=desc.strip() if desc.strip() else name.strip(),
+                            move_type=move_type,
                         )
+                    )
+                    seen_names.add(text_content.lower())
 
         return moves
 
