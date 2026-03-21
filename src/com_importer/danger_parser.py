@@ -358,59 +358,95 @@ class DangerParser:
         Captures both:
         - Conditional moves: "When X happens, Y" or "If condition: action"
         - Simple moves/abilities: "Get someone to like her (friendly-2)"
+        - Moves marked with "(hard move)" or "(soft move)"
         """
         moves = []
         seen_names = set()
 
-        # Look for all bullet points
+        # Look for all potential move lines
         lines = text.split("\n")
-        for _i, line in enumerate(lines):
-            if line.strip().startswith("•") or line.strip().startswith("-"):
-                text_content = line.lstrip("•-").strip()
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
 
-                if not text_content:
-                    continue
+            # Skip section headers and other non-moves
+            if line.endswith(":") or line.isupper():
+                continue
 
-                # Skip if we've already added this
-                if text_content.lower() in seen_names:
-                    continue
+            # Check if line is a potential move by looking for:
+            # 1. Bullet points (•, -, *)
+            # 2. Lines containing "(hard/soft move)" markers
+            # 3. Lines starting with move keywords
+            is_potential_move = False
 
-                # Determine if this is a hard move, soft move, or custom move
-                move_type = MoveType.CUSTOM
-                if "(hard move)" in text_content.lower():
-                    move_type = MoveType.HARD
-                    name = text_content.replace("(hard move)", "").strip()
-                elif "(soft move)" in text_content.lower():
-                    move_type = MoveType.SOFT
-                    name = text_content.replace("(soft move)", "").strip()
-                else:
-                    # Check for condition keywords
-                    if any(word in text_content.lower() for word in self.MOVE_CONDITION_KEYWORDS):
-                        move_type = MoveType.CUSTOM
+            # Strip common bullet characters if present
+            text_content = line
+            if line[0] in "•-*":
+                text_content = line.lstrip("•-* ").strip()
+                is_potential_move = True
+            elif "(hard move)" in line.lower() or "(soft move)" in line.lower():
+                text_content = line
+                is_potential_move = True
+            elif any(
+                line.lower().startswith(keyword)
+                for keyword in (
+                    "when ",
+                    "if ",
+                    "get ",
+                    "slam ",
+                    "accelerate",
+                    "takes ",
+                    "rolls ",
+                    "spends",
+                )
+            ):
+                text_content = line
+                is_potential_move = True
 
-                    name = text_content
+            if not is_potential_move or not text_content:
+                continue
 
-                # If there's a condition or colon, split into name and description
-                if ":" in text_content:
-                    name, desc = text_content.split(":", 1)
-                    name = name.strip()
-                    desc = desc.strip()
-                else:
-                    # For simple moves without colons, use the full text as name
-                    # Extract just the main part (before parenthetical notes)
-                    if "(" in name:
-                        name = name.split("(")[0].strip()
-                    desc = text_content
+            # Skip if we've already added this
+            if text_content.lower() in seen_names:
+                continue
 
-                if name and name.strip():
-                    moves.append(
-                        GMMove(
-                            name=name.strip(),
-                            description=desc.strip() if desc.strip() else name.strip(),
-                            move_type=move_type,
-                        )
+            # Determine move type based on content
+            move_type = MoveType.CUSTOM
+            if "(hard move)" in text_content.lower():
+                move_type = MoveType.HARD
+                name = text_content.replace("(hard move)", "").replace("(Hard Move)", "").strip()
+            elif "(soft move)" in text_content.lower():
+                move_type = MoveType.SOFT
+                name = text_content.replace("(soft move)", "").replace("(Soft Move)", "").strip()
+            else:
+                # Check for condition keywords
+                if any(word in text_content.lower() for word in self.MOVE_CONDITION_KEYWORDS):
+                    move_type = MoveType.CUSTOM
+
+                name = text_content
+
+            # If there's a colon, split into name and description
+            if ":" in text_content:
+                name, desc = text_content.split(":", 1)
+                name = name.strip()
+                desc = desc.strip()
+            else:
+                # For simple moves without colons, use the full text as name
+                # Extract just the main part (before parenthetical notes)
+                if "(" in name:
+                    name = name.split("(")[0].strip()
+                desc = text_content
+
+            if name and name.strip():
+                moves.append(
+                    GMMove(
+                        name=name.strip(),
+                        description=desc.strip() if desc.strip() else name.strip(),
+                        move_type=move_type,
                     )
-                    seen_names.add(text_content.lower())
+                )
+                seen_names.add(text_content.lower())
 
         return moves
 
