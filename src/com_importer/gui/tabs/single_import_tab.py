@@ -472,11 +472,29 @@ class SingleImportTab(QWidget):
                     status="success",
                 )
 
-            QMessageBox.information(
-                self,
-                "Success",
-                f"{actor_label} created in Foundry!\n\nActor ID: {actor_id}",
-            )
+            # Check if export fallback occurred
+            if (
+                hasattr(self.foundry_client, "last_export_path")
+                and self.foundry_client.last_export_path
+            ):
+                from ..dialogs import ExportResultDialog
+
+                export_dialog = ExportResultDialog(
+                    export_path=self.foundry_client.last_export_path,
+                    actor_name=self.current_actor.name,
+                    items_count=self.foundry_client.last_export_items_count,
+                    parent=self,
+                )
+                export_dialog.exec()
+                # Clear the export tracker
+                self.foundry_client.last_export_path = None
+                self.foundry_client.last_export_items_count = 0
+            else:
+                QMessageBox.information(
+                    self,
+                    "Success",
+                    f"{actor_label} created in Foundry!\n\nActor ID: {actor_id}",
+                )
 
             # Clear and reset
             self.text_input.clear()

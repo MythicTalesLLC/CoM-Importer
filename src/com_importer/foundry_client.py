@@ -81,6 +81,8 @@ class FoundryRestClient(FoundryClient):
             }
         )
         self._full_actor_data = None  # Store for export fallback
+        self.last_export_path = None  # Track last successful export
+        self.last_export_items_count = 0  # Track items in last export
 
     def test_connection(self) -> tuple[bool, str]:
         """Test connection to Foundry API relay.
@@ -216,6 +218,8 @@ class FoundryRestClient(FoundryClient):
                     self._full_actor_data,
                     export_dir=self.export_dir,
                 )
+                self.last_export_path = export_path
+                self.last_export_items_count = len(self._full_actor_data.get("items", []))
                 print(f"[TRACE] ✓ JSON exported to: {export_path}")
                 print("[TRACE] You can manually import this file into Foundry")
                 logger.info(f"Exported JSON fallback to: {export_path}")

@@ -307,3 +307,139 @@ class EditActorDialog(QDialog):
     def get_actor(self) -> DangerActor | CharacterActor:
         """Get the edited actor."""
         return self.actor
+
+
+class ExportResultDialog(QDialog):
+    """Dialog showing successful export and next steps for user."""
+
+    def __init__(self, export_path: str, actor_name: str, items_count: int, parent=None):
+        """
+        Initialize export result dialog.
+
+        Args:
+            export_path: Path to exported JSON file
+            actor_name: Name of the exported actor
+            items_count: Number of items exported
+        """
+        super().__init__(parent)
+        self.export_path = export_path
+        self.actor_name = actor_name
+        self.items_count = items_count
+        self.setWindowTitle("Export Complete")
+        self.setGeometry(150, 150, 900, 500)
+        self._create_ui()
+
+    def _create_ui(self) -> None:
+        """Create the user interface."""
+        layout = QVBoxLayout(self)
+
+        # Title
+        title = QLabel("✓ Export Complete - REST API Limitation Workaround")
+        title.setStyleSheet("font-size: 14px; font-weight: bold; color: #2e7d32;")
+        layout.addWidget(title)
+
+        # Explanation
+        explanation = QPlainTextEdit()
+        explanation.setReadOnly(True)
+        explanation.setPlainText(
+            f"""WHAT HAPPENED:
+Your threat actor was successfully created in Foundry, but due to REST API
+limitations, the items (GM moves, spectrums, tags, statuses) could not be
+linked via the remote API.
+
+SOLUTION - AUTOMATIC EXPORT:
+Your complete actor JSON with all {self.items_count} items has been automatically
+exported and is ready to import.
+
+ACTOR: {self.actor_name}
+ITEMS: {self.items_count} (moves, spectrums, tags)
+FILE: {self.export_path}"""
+        )
+        explanation.setStyleSheet(
+            "background-color: #f5f5f5; padding: 10px; border: 1px solid #ddd; border-radius: 4px;"
+        )
+        layout.addWidget(explanation)
+
+        # Next steps
+        steps_label = QLabel("IMPORT INTO FOUNDRY (3 Steps):")
+        steps_label.setStyleSheet("font-weight: bold; margin-top: 15px;")
+        layout.addWidget(steps_label)
+
+        steps = QPlainTextEdit()
+        steps.setReadOnly(True)
+        filename = self.export_path.split("/")[-1]
+        steps.setPlainText(
+            f"""1. Open your Foundry instance
+2. Navigate to the Actors sidebar
+3. Click "Import Actors" button
+4. Select: {filename}
+5. Click Import
+   → All items will be created with proper relationships
+
+Once imported, refresh your browser and check the actor sheet. You'll see:
+  • All GM moves listed
+  • All spectrums with correct tiers
+  • All tags and statuses properly linked"""
+        )
+        steps.setStyleSheet(
+            "background-color: #fff3e0; padding: 10px; border: 1px solid #ffb74d;"
+            " border-radius: 4px;"
+        )
+        layout.addWidget(steps)
+
+        # Buttons
+        button_layout = QHBoxLayout()
+
+        copy_btn = QPushButton("Copy File Path")
+        copy_btn.clicked.connect(self._copy_to_clipboard)
+        button_layout.addWidget(copy_btn)
+
+        open_btn = QPushButton("Open File Location")
+        open_btn.clicked.connect(self._open_file_location)
+        button_layout.addWidget(open_btn)
+
+        button_layout.addStretch()
+
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(self.accept)
+        button_layout.addWidget(close_btn)
+
+        layout.addLayout(button_layout)
+
+    def _copy_to_clipboard(self) -> None:
+        """Copy export path to clipboard."""
+        from PyQt6.QtGui import QClipboard
+        from PyQt6.QtWidgets import QApplication
+
+        cb = QApplication.clipboard()
+        cb.setText(self.export_path, QClipboard.Mode.Clipboard)
+
+        from PyQt6.QtWidgets import QMessageBox
+
+        QMessageBox.information(
+            self, "Copied", f"File path copied to clipboard:\n{self.export_path}"
+        )
+
+    def _open_file_location(self) -> None:
+        """Open the file location in system file browser."""
+        import subprocess
+        from pathlib import Path
+
+        file_path = Path(self.export_path)
+
+        # Open file location in native file browser
+        if file_path.exists():
+            if self.parent() and hasattr(self.parent(), "show"):
+                # macOS
+                try:
+                    subprocess.run(["open", "-R", str(file_path)], check=True)
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    # Windows/Linux fallback
+                    try:
+                        subprocess.run(["xdg-open", str(file_path.parent)], check=True)
+                    except (subprocess.CalledProcessError, FileNotFoundError):
+                        from PyQt6.QtWidgets import QMessageBox
+
+                        QMessageBox.information(
+                            self, "File Location", f"File saved at:\n{self.export_path}"
+                        )
