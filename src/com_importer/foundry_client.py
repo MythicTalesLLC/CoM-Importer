@@ -116,6 +116,7 @@ class FoundryRestClient(FoundryClient):
         """
         endpoint = urljoin(self.api_url, "/create")
         payload = {
+            "clientId": self.client_id,
             "collection": "actors",
             "data": actor_data,
         }
@@ -140,6 +141,7 @@ class FoundryRestClient(FoundryClient):
         """
         endpoint = urljoin(self.api_url, "/update")
         payload = {
+            "clientId": self.client_id,
             "collection": "actors",
             "_id": actor_id,
             "data": actor_data,
@@ -163,6 +165,7 @@ class FoundryRestClient(FoundryClient):
         """
         endpoint = urljoin(self.api_url, "/create")
         payload = {
+            "clientId": self.client_id,
             "collection": "items",
             "data": {**item_data, "parent": actor_id},
         }
