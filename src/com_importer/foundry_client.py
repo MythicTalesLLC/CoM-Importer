@@ -126,7 +126,9 @@ class FoundryRestClient(FoundryClient):
                 f"Failed to create actor: HTTP {response.status_code} - {response.text}"
             )
         result = response.json()
-        return result.get("_id", result.get("id", ""))
+        # REST API returns entity nested within response
+        entity = result.get("entity", {})
+        return entity.get("_id", result.get("_id", result.get("id", "")))
 
     def update_actor(self, actor_id: str, actor_data: dict[str, Any]) -> None:
         """
