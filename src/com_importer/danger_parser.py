@@ -466,6 +466,14 @@ class DangerParser:
             if ":" in text_content:
                 name, desc = text_content.split(":", 1)
                 name = name.strip()
+                # Remove any move type markers from the split name
+                name = (
+                    name.replace("(hard move)", "")
+                    .replace("(Hard Move)", "")
+                    .replace("(soft move)", "")
+                    .replace("(Soft Move)", "")
+                    .strip()
+                )
                 desc = desc.strip()
 
                 # Collect continuation lines for multi-line descriptions
