@@ -165,13 +165,29 @@ class DangerParser:
             if not in_description and not line.strip():
                 continue
 
-            # Skip section header keywords (keyword at start like "Keyword:")
-            if stripped and re.match(
-                r"^(mythos|logos|rating|spectrum|move|tag|status)[:\s]", stripped
-            ):
-                if in_description:
-                    break
-                continue
+            # Stop if we hit a section marker
+            # Recognized section starters:
+            # - Standard: "keyword:" (mythos:, logos:, rating:, spectrum:, move:, tag:, status:)
+            # - Spectrum format: "NAME NUMBER / NAME NUMBER" (all caps)
+            # - Bullet points: "• " or "- " (moves/abilities)
+            if stripped:
+                # Check for standard section headers
+                if re.match(r"^(mythos|logos|rating|spectrum|move|tag|status)[:\s]", stripped):
+                    if in_description:
+                        break
+                    continue
+
+                # Check for spectrum alt format: "WORD NUMBER / WORD NUMBER"
+                if re.match(r"^([A-Z][A-Z\s]+?)\s+\d+\s*/\s*([A-Z][A-Z\s]+?)\s+\d+", line.strip()):
+                    if in_description:
+                        break
+                    continue
+
+                # Check for bullet point (start of moves section)
+                if line.lstrip().startswith(("•", "-")):
+                    if in_description:
+                        break
+                    continue
 
             # If we haven't started description yet, the first non-empty, non-header line starts it
             if not in_description and line.strip():
