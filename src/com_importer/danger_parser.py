@@ -311,14 +311,13 @@ class DangerParser:
             name2 = match.group(3).strip()
             value2_raw = match.group(4)
 
-            # Try to add spectrum 1 if it has a valid value
-            if (
-                value1_raw.strip()
-                and value1_raw != "-"
-                and name1.lower() not in seen_spectrum_names
-                and len(name1) < 50
-            ):
-                value1_str = self._correct_ocr_digit(value1_raw)
+            # Try to add spectrum 1 if we have a name
+            if name1.lower() not in seen_spectrum_names and len(name1) < 50:
+                value1_str = (
+                    self._correct_ocr_digit(value1_raw)
+                    if value1_raw.strip() and value1_raw != "-"
+                    else "1"
+                )
                 try:
                     current1 = int(value1_str)
                     spectrum1 = Spectrum(
@@ -332,14 +331,13 @@ class DangerParser:
                 except ValueError:
                     pass
 
-            # Try to add spectrum 2 if it has a valid value
-            if (
-                value2_raw.strip()
-                and value2_raw != "-"
-                and name2.lower() not in seen_spectrum_names
-                and len(name2) < 50
-            ):
-                value2_str = self._correct_ocr_digit(value2_raw)
+            # Try to add spectrum 2 if we have a name
+            if name2.lower() not in seen_spectrum_names and len(name2) < 50:
+                value2_str = (
+                    self._correct_ocr_digit(value2_raw)
+                    if value2_raw.strip() and value2_raw != "-"
+                    else "1"
+                )
                 try:
                     current2 = int(value2_str)
                     spectrum2 = Spectrum(
