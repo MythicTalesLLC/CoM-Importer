@@ -416,10 +416,10 @@ class DangerParser:
             # 3. Lines starting with move keywords
             is_potential_move = False
 
-            # Strip common bullet characters if present
+            # Strip common bullet characters if present (including OCR variants like ¢)
             text_content = line
-            if line and line[0] in "•-*":
-                text_content = line.lstrip("•-* ").strip()
+            if line and line[0] in "•-*¢":
+                text_content = line.lstrip("•-*¢ ").strip()
                 is_potential_move = True
             elif "(hard move)" in line.lower() or "(soft move)" in line.lower():
                 text_content = line
@@ -476,7 +476,7 @@ class DangerParser:
                     if not next_line:
                         i += 1
                         continue
-                    if next_line[0] in "•-*" or any(
+                    if next_line[0] in "•-*¢" or any(
                         next_line.lower().startswith(kw)
                         for kw in (
                             "when ",
