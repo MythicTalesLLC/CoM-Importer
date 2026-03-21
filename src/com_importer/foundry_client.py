@@ -7,12 +7,15 @@ Supports remote Foundry instances via REST API and local Foundry installations.
 from __future__ import annotations
 
 import json
+import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin
 
 import requests
+
+logger = logging.getLogger(__name__)
 
 
 class FoundryClient(ABC):
@@ -149,11 +152,15 @@ class FoundryRestClient(FoundryClient):
 
         # Add items (spectrums, moves, tags, etc.) after creation
         if actor_id and actor_data.get("items"):
-            for item_data in actor_data["items"]:
+            logger.info(f"Adding {len(actor_data['items'])} items to actor {actor_id}")
+            for i, item_data in enumerate(actor_data["items"]):
                 try:
                     self.add_item_to_actor(actor_id, item_data)
-                except Exception:
+                    item_name = item_data.get("name", "Unknown")
+                    logger.info(f"  Item {i+1}/{len(actor_data['items'])}: {item_name}")
+                except Exception as e:
                     # Log but don't fail - actor was created
+                    logger.error(f"  Failed to add item {i+1}: {str(e)[:100]}")
                     pass
 
         return actor_id
@@ -194,13 +201,19 @@ class FoundryRestClient(FoundryClient):
             Exception: If addition fails
         """
         endpoint = urljoin(self.api_url, f"/create?clientId={self.client_id}")
+
+        # Remove _id - REST API will generate it
+        item_for_creation = {k: v for k, v in item_data.items() if k != "_id"}
+
         payload = {
             "entityType": "Item",
             "collection": "items",
-            "data": {**item_data, "parent": actor_id},
+            "data": {**item_for_creation, "parent": actor_id},
         }
+        logger.debug(f"Adding item: {item_data.get('name')} (type: {item_data.get('type')})")
         response = self.session.post(endpoint, json=payload, timeout=30)
         if response.status_code not in (200, 201):
+            logger.error(f"Failed to add item {item_data.get('name')}: HTTP {response.status_code}")
             raise Exception(f"Failed to add item: HTTP {response.status_code} - {response.text}")
 
 
