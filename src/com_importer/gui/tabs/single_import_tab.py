@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QComboBox,
     QFileDialog,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -20,6 +23,139 @@ from PyQt6.QtWidgets import (
 from ...actor_detector import ActorTypeDetector
 from ...character_parser import CharacterParser
 from ...danger_parser import DangerParser, ParsingError
+
+logger = logging.getLogger(__name__)
+
+
+class DragDropImageWidget(QWidget):
+    """Widget for image input with drag-and-drop and path entry support."""
+
+    def __init__(self, parent=None):
+        """Initialize the drag-drop widget."""
+        super().__init__(parent)
+        self.image_path = ""
+        self._create_ui()
+
+    def _create_ui(self) -> None:
+        """Create the UI."""
+        layout = QVBoxLayout(self)
+
+        # Path entry
+        layout.addWidget(QLabel("Image file path (or drag & drop below):"))
+        path_layout = QHBoxLayout()
+        self.path_input = QLineEdit()
+        self.path_input.setPlaceholderText(
+            "Enter full path (e.g., /Users/mythic/Downloads/image.png)"
+        )
+        self.path_input.returnPressed.connect(self._load_from_path)
+        path_layout.addWidget(self.path_input)
+
+        browse_btn = QPushButton("Browse...")
+        browse_btn.clicked.connect(self._browse_files)
+        path_layout.addWidget(browse_btn)
+        layout.addLayout(path_layout)
+
+        # Drag and drop zone
+        self.drop_zone = QLabel("📁 Drag image files here or click Browse")
+        self.drop_zone.setStyleSheet(
+            "QLabel {"
+            "  border: 2px dashed #2196F3;"
+            "  border-radius: 8px;"
+            "  padding: 40px;"
+            "  text-align: center;"
+            "  background-color: #F5F5F5;"
+            "  color: #666;"
+            "  font-size: 14px;"
+            "}"
+        )
+        self.drop_zone.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.drop_zone.setAcceptDrops(True)
+        self.drop_zone.dragEnterEvent = self._drag_enter_event
+        self.drop_zone.dropEvent = self._drop_event
+        layout.addWidget(self.drop_zone, 1)
+
+        # Status label
+        self.status_label = QLabel("Ready")
+        layout.addWidget(self.status_label)
+
+    def _drag_enter_event(self, event) -> None:
+        """Handle drag enter event."""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+            self.drop_zone.setStyleSheet(
+                "QLabel {"
+                "  border: 2px solid #2196F3;"
+                "  border-radius: 8px;"
+                "  padding: 40px;"
+                "  background-color: #E3F2FD;"
+                "  color: #1976D2;"
+                "  font-size: 14px;"
+                "  font-weight: bold;"
+                "}"
+            )
+
+    def _drag_leave_event(self, event) -> None:
+        """Handle drag leave event."""
+        self.drop_zone.setStyleSheet(
+            "QLabel {"
+            "  border: 2px dashed #2196F3;"
+            "  border-radius: 8px;"
+            "  padding: 40px;"
+            "  text-align: center;"
+            "  background-color: #F5F5F5;"
+            "  color: #666;"
+            "  font-size: 14px;"
+            "}"
+        )
+
+    def _drop_event(self, event) -> None:
+        """Handle drop event."""
+        self._drag_leave_event(event)
+        urls = event.mimeData().urls()
+        if urls:
+            file_path = urls[0].toLocalFile()
+            self._load_image(file_path)
+
+    def _browse_files(self) -> None:
+        """Browse for image file."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Image",
+            str(Path.home() / "Downloads"),
+            "Image Files (*.png *.jpg *.jpeg *.bmp *.gif);;All Files (*)",
+        )
+        if file_path:
+            self.path_input.setText(file_path)
+            self._load_image(file_path)
+
+    def _load_from_path(self) -> None:
+        """Load image from path input."""
+        file_path = self.path_input.text().strip()
+        if file_path:
+            self._load_image(file_path)
+
+    def _load_image(self, file_path: str) -> None:
+        """Load and validate image file."""
+        path = Path(file_path)
+
+        if not path.exists():
+            self.status_label.setText(f"❌ File not found: {file_path}")
+            return
+
+        if path.suffix.lower() not in (".png", ".jpg", ".jpeg", ".bmp", ".gif"):
+            self.status_label.setText(
+                f"❌ Invalid file type: {path.suffix}. Use PNG, JPG, BMP, or GIF."
+            )
+            return
+
+        self.image_path = file_path
+        self.path_input.setText(file_path)
+        self.status_label.setText(f"✓ Ready to process: {path.name}")
+
+    def get_image_path(self) -> str:
+        """Get the selected image path."""
+        return self.image_path
+
 
 logger = logging.getLogger(__name__)
 
@@ -104,15 +240,8 @@ class SingleImportTab(QWidget):
         # Image input tab
         image_widget = QWidget()
         image_layout = QVBoxLayout(image_widget)
-        image_layout.addWidget(QLabel("Select image or PDF page:"))
-        image_button_layout = QHBoxLayout()
-        select_image_btn = QPushButton("Select Image...")
-        select_image_btn.clicked.connect(self._select_image)
-        image_button_layout.addWidget(select_image_btn)
-        self.image_label = QLabel("No image selected")
-        image_button_layout.addWidget(self.image_label)
-        image_layout.addLayout(image_button_layout)
-        image_layout.addStretch()
+        self.image_drop_widget = DragDropImageWidget()
+        image_layout.addWidget(self.image_drop_widget)
         tabs.addTab(image_widget, "Image")
 
         # PDF input tab
@@ -163,15 +292,20 @@ class SingleImportTab(QWidget):
         )
 
     def _select_image(self) -> None:
-        """Select an image file and OCR it."""
+        """Select an image file and OCR it (legacy method)."""
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Select Image", "", "Image Files (*.png *.jpg *.jpeg *.bmp *.gif);;All Files (*)"
+            self,
+            "Select Image",
+            str(Path.home() / "Downloads"),
+            "Image Files (*.png *.jpg *.jpeg *.bmp *.gif);;All Files (*)",
         )
         if not file_path:
             return
 
-        self.image_label.setText(f"Selected: {file_path}\nExtracting text...")
+        self._process_image(file_path)
 
+    def _process_image(self, file_path: str) -> None:
+        """Process image file with OCR and populate text field."""
         # Show progress dialog
         progress = QMessageBox(self)
         progress.setWindowTitle("Processing...")
@@ -201,7 +335,6 @@ class SingleImportTab(QWidget):
 
             # Populate text field
             self.text_input.setPlainText(text)
-            self.image_label.setText(f"✓ Extracted from: {file_path}")
 
             # Auto-detect actor type from extracted text
             self._auto_detect_actor_type()
@@ -214,7 +347,6 @@ class SingleImportTab(QWidget):
 
         except Exception as e:
             progress.close()
-            self.image_label.setText(f"❌ Error: {str(e)}")
             QMessageBox.critical(
                 self,
                 "OCR Error",
@@ -335,10 +467,21 @@ class SingleImportTab(QWidget):
         return 0, False
 
     def _parse_input(self) -> None:
-        """Parse the input text."""
+        """Parse the input text. If on Image tab, process image first."""
+        # Check if we're on the image tab and have an image path
+        image_path = self.image_drop_widget.get_image_path()
+        if image_path and not self.text_input.toPlainText().strip():
+            # Process the image
+            self._process_image(image_path)
+            return
+
         text = self.text_input.toPlainText()
         if not text.strip():
-            QMessageBox.warning(self, "No Input", "Please enter or paste some text first.")
+            QMessageBox.warning(
+                self,
+                "No Input",
+                "Please enter/paste text, or select an image with drag-and-drop or Browse.",
+            )
             return
 
         try:

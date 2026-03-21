@@ -63,7 +63,12 @@ class DangerToActorConverter:
         Parse [tag] and [status] syntax in move descriptions.
 
         Extracts referenced tags and statuses for auto-creation.
+        Skips tags/statuses that already exist.
         """
+        # Track existing tags/statuses to avoid duplicates
+        existing_tag_names = {tag.name.lower() for tag in danger.tags}
+        existing_status_names = {status.name.lower() for status in danger.statuses}
+
         for move in danger.gm_moves:
             # Find all bracketed references
             for match in re.finditer(self.BRACKET_PATTERN, move.description):
@@ -72,8 +77,12 @@ class DangerToActorConverter:
                 # Try to guess if it's a tag or status
                 # Status indicators: numbers, "condition", "status"
                 if self._looks_like_status(bracket_content):
-                    if bracket_content not in self.created_statuses:
+                    if (
+                        bracket_content.lower() not in existing_status_names
+                        and bracket_content not in self.created_statuses
+                    ):
                         self.created_statuses.add(bracket_content)
+                        existing_status_names.add(bracket_content.lower())
                         # Create status with default category
                         status = DangerStatus(
                             name=bracket_content,
@@ -82,8 +91,12 @@ class DangerToActorConverter:
                         danger.statuses.append(status)
                 else:
                     # Treat as tag
-                    if bracket_content not in self.created_tags:
+                    if (
+                        bracket_content.lower() not in existing_tag_names
+                        and bracket_content not in self.created_tags
+                    ):
                         self.created_tags.add(bracket_content)
+                        existing_tag_names.add(bracket_content.lower())
                         tag_type = self._infer_tag_type(bracket_content)
                         tag = Tag(
                             name=bracket_content,
