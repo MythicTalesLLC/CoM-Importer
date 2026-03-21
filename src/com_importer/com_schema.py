@@ -116,11 +116,7 @@ class Spectrum:
             "name": self.name,
             "type": "spectrum",
             "system": {
-                "description": "",
-                "tier": self.current_tier,
-                "pips": self.pips,
-                "locked": False,
-                "version": "3.0.0",
+                "maxTier": self.max_tier,
             },
         }
 
@@ -238,27 +234,10 @@ class DangerActor:
         if actor_id is None:
             actor_id = str(uuid.uuid4())
 
-        # Build items array with all moves, statuses, tags
-        # NOTE: Spectrums are CHARACTER-ONLY in City of Mist
-        # For threats, convert spectrums to status items
+        # Build items array with all moves, spectrums, tags, statuses
         items: list[dict[str, Any]] = []
         items.extend(move.to_foundry_item() for move in self.gm_moves)
-
-        # Convert spectrums to status items (threats don't use spectrum type)
-        for spectrum in self.spectrums:
-            status_item = {
-                "name": spectrum.name,
-                "type": "status",
-                "system": {
-                    "description": "",
-                    "tier": spectrum.current_tier,
-                    "pips": spectrum.pips,
-                    "locked": False,
-                    "version": "3.0.0",
-                },
-            }
-            items.append(status_item)
-
+        items.extend(spectrum.to_foundry_item() for spectrum in self.spectrums)
         items.extend(tag.to_foundry_item() for tag in self.tags)
         items.extend(status.to_foundry_item() for status in self.statuses)
 

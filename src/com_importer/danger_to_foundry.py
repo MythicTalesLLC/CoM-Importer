@@ -174,10 +174,24 @@ class DangerToActorConverter:
         if "items" not in actor_json:
             actor_json["items"] = []
 
-        # Assign IDs to items that don't have them
+        # Enhance items with required Foundry fields for import
         for item in actor_json.get("items", []):
             if "_id" not in item:
                 item["_id"] = str(uuid.uuid4())
+
+            # Add required Foundry metadata fields for proper import
+            if "img" not in item:
+                item["img"] = "icons/svg/item-bag.svg"
+            if "effects" not in item:
+                item["effects"] = []
+            if "folder" not in item:
+                item["folder"] = None
+            if "sort" not in item:
+                item["sort"] = 0
+            if "flags" not in item:
+                item["flags"] = {}
+            if "ownership" not in item:
+                item["ownership"] = {"default": 0}
 
         # Clean up HTML in fields
         for field in ("biography", "description", "short_description", "gmnotes"):
