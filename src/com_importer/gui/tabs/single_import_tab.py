@@ -471,9 +471,9 @@ class SingleImportTab(QWidget):
         # Check if we're on the image tab and have an image path
         image_path = self.image_drop_widget.get_image_path()
         if image_path and not self.text_input.toPlainText().strip():
-            # Process the image
+            # Process the image (this populates text_input)
             self._process_image(image_path)
-            return
+            # Don't return - continue to parse the extracted text below
 
         text = self.text_input.toPlainText()
         if not text.strip():
