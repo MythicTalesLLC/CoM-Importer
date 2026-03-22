@@ -610,12 +610,19 @@ class EditActorDialog(QDialog):
         self._apply_edits()
         errors = self.actor.validate()
         if errors:
-            QMessageBox.warning(
-                self,
-                "Validation Errors",
-                "Please fix the following issues:\n\n" + "\n".join(errors),
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Validation Warnings")
+            msg.setIcon(QMessageBox.Icon.Warning)
+            msg.setText(
+                "The following issues were found:\n\n" + "\n".join(f"• {e}" for e in errors)
             )
-            return
+            msg.setInformativeText("Save anyway?")
+            msg.setStandardButtons(
+                QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Cancel
+            )
+            msg.setDefaultButton(QMessageBox.StandardButton.Cancel)
+            if msg.exec() != QMessageBox.StandardButton.Save:
+                return
         self.accept()
 
     def get_actor(self) -> DangerActor | CharacterActor:
@@ -624,29 +631,17 @@ class EditActorDialog(QDialog):
 
     @staticmethod
     def _rich_text_value(edit: QTextEdit) -> str:
-        """Return HTML if the document has non-default character formatting, else plain text."""
-        doc = edit.document()
-        it = doc.begin()
-        has_formatting = False
-        while it != doc.end():
-            block_it = it.begin()
-            while not block_it.atEnd():
-                frag = block_it.fragment()
-                fmt = frag.charFormat()
-                if (
-                    fmt.fontItalic()
-                    or fmt.fontUnderline()
-                    or fmt.background().color().isValid()
-                    and fmt.background().color().alpha() > 0
-                    and fmt.background().color() != QColor("transparent")
-                ):
-                    has_formatting = True
-                    break
-                block_it += 1
-            if has_formatting:
-                break
-            it = it.next()
-        return edit.toHtml() if has_formatting else edit.toPlainText().strip()
+        """Return HTML if the document has non-default character formatting, else plain text.
+
+        Avoids iterating QTextBlock/QTextFragment objects directly (fragile in PyQt6);
+        instead inspects the serialised HTML for known formatting markers.
+        """
+        html = edit.toHtml()
+        has_formatting = any(
+            marker in html
+            for marker in ("font-style:italic", "text-decoration:", "background-color:")
+        )
+        return html if has_formatting else edit.toPlainText().strip()
 
     @staticmethod
     def _mono_font():

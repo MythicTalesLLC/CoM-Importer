@@ -218,6 +218,21 @@ class SingleImportTab(QWidget):
 
         layout.addLayout(button_layout)
 
+        # "Create from scratch" buttons — separate row, visually distinct
+        create_layout = QHBoxLayout()
+        create_layout.addWidget(QLabel("Create from scratch:"))
+        new_danger_button = QPushButton("＋ New Danger / Threat / NPC")
+        new_danger_button.setToolTip("Open a blank danger actor to build from scratch")
+        new_danger_button.clicked.connect(self._new_danger)
+        create_layout.addWidget(new_danger_button)
+
+        new_character_button = QPushButton("＋ New Character")
+        new_character_button.setToolTip("Open a blank character actor to build from scratch")
+        new_character_button.clicked.connect(self._new_character)
+        create_layout.addWidget(new_character_button)
+        create_layout.addStretch()
+        layout.addLayout(create_layout)
+
         # Parse status bar — single line showing parse result instead of popup dialogs
         self.parse_status_label = QLabel("")
         self.parse_status_label.setStyleSheet("padding: 4px; font-weight: bold;")
@@ -501,6 +516,34 @@ class SingleImportTab(QWidget):
         if dialog.exec():
             self.current_actor = dialog.get_actor()
             self._set_parse_status("✓ Actor edits saved.", "ok")
+
+    def _new_danger(self) -> None:
+        """Create a brand-new danger/threat/NPC from scratch."""
+        from ...com_schema import DangerActor
+        from ..dialogs import EditActorDialog
+
+        actor = DangerActor(name="New Danger")
+        dialog = EditActorDialog(actor, self)
+        if dialog.exec():
+            self.current_actor = dialog.get_actor()
+            self.current_actor_type = "threat"
+            self._set_parse_status(
+                f"✓ New danger '{self.current_actor.name}' ready — click Export to save.", "ok"
+            )
+
+    def _new_character(self) -> None:
+        """Create a brand-new character from scratch."""
+        from ...com_schema import CharacterActor
+        from ..dialogs import EditActorDialog
+
+        actor = CharacterActor(name="New Character")
+        dialog = EditActorDialog(actor, self)
+        if dialog.exec():
+            self.current_actor = dialog.get_actor()
+            self.current_actor_type = "character"
+            self._set_parse_status(
+                f"✓ New character '{self.current_actor.name}' ready — click Export to save.", "ok"
+            )
 
     def _show_preview(self) -> None:
         """Show JSON preview of parsed actor."""
