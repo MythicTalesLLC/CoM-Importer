@@ -44,10 +44,9 @@ class DangerToActorConverter:
         if actor_id is None:
             actor_id = str(uuid.uuid4())
 
-        # Build star-rating alias from danger_rating (e.g. "3" → "★★★", "+2" → "+★★")
-        if not danger.alias or danger.alias == "?????":
-            if danger.danger_rating:
-                danger.alias = self._rating_to_stars(str(danger.danger_rating))
+        # Set short_description to the star rating (e.g. "3" → "★★★", "+2" → "+★★")
+        if not danger.short_description and danger.danger_rating:
+            danger.short_description = self._rating_to_stars(str(danger.danger_rating))
 
         # Parse bracket syntax in moves to auto-create tags/statuses
         self._parse_bracket_syntax(danger)
