@@ -288,13 +288,14 @@ class EditActorDialog(QDialog):
     # Table helpers
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _row_buttons(table: QTableWidget, add_fn) -> QHBoxLayout:
-        """Return a row of Add / Remove buttons bound to *table*."""
+    def _row_buttons(self, table: QTableWidget, add_fn) -> QHBoxLayout:
+        """Return a row of Add / Remove / Move-Up / Move-Down buttons bound to *table*."""
         row = QHBoxLayout()
+
         add_btn = QPushButton("+ Add Row")
         add_btn.clicked.connect(add_fn)
         row.addWidget(add_btn)
+
         remove_btn = QPushButton("− Remove Selected")
 
         def _remove():
@@ -307,8 +308,69 @@ class EditActorDialog(QDialog):
 
         remove_btn.clicked.connect(_remove)
         row.addWidget(remove_btn)
+
+        row.addSpacing(12)
+
+        up_btn = QPushButton("↑ Move Up")
+        up_btn.setToolTip("Move selected row up")
+
+        def _move_up():
+            selected = table.selectedItems()
+            if not selected:
+                return
+            r = selected[0].row()
+            if r > 0:
+                self._swap_row_content(table, r, r - 1)
+                table.selectRow(r - 1)
+
+        up_btn.clicked.connect(_move_up)
+        row.addWidget(up_btn)
+
+        down_btn = QPushButton("↓ Move Down")
+        down_btn.setToolTip("Move selected row down")
+
+        def _move_down():
+            selected = table.selectedItems()
+            if not selected:
+                return
+            r = selected[0].row()
+            if r < table.rowCount() - 1:
+                self._swap_row_content(table, r, r + 1)
+                table.selectRow(r + 1)
+
+        down_btn.clicked.connect(_move_down)
+        row.addWidget(down_btn)
+
         row.addStretch()
         return row
+
+    @staticmethod
+    def _swap_row_content(table: QTableWidget, row_a: int, row_b: int) -> None:
+        """Swap the visible content of two rows in *table*.
+
+        Handles both plain QTableWidgetItem cells and embedded cell widgets
+        (e.g. the QComboBox in the moves table).  For widgets only the
+        *current-index / selected-text* is swapped so the widgets themselves
+        stay in place (Qt does not support moving live cell widgets).
+        """
+        for col in range(table.columnCount()):
+            widget_a = table.cellWidget(row_a, col)
+            widget_b = table.cellWidget(row_b, col)
+
+            if isinstance(widget_a, QComboBox) and isinstance(widget_b, QComboBox):
+                # Swap combo selections by index
+                idx_a = widget_a.currentIndex()
+                widget_a.setCurrentIndex(widget_b.currentIndex())
+                widget_b.setCurrentIndex(idx_a)
+            elif widget_a is None and widget_b is None:
+                # Plain text items — swap text
+                item_a = table.item(row_a, col)
+                item_b = table.item(row_b, col)
+                text_a = item_a.text() if item_a else ""
+                text_b = item_b.text() if item_b else ""
+                table.setItem(row_a, col, QTableWidgetItem(text_b))
+                table.setItem(row_b, col, QTableWidgetItem(text_a))
+            # Mixed (one widget, one item): leave as-is to avoid corruption
 
     def _append_spectrum_row(self, name: str = "", max_tier: str = "4") -> None:
         row = self.spectrums_table.rowCount()

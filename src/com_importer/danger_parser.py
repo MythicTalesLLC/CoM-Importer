@@ -218,10 +218,12 @@ class DangerParser:
             if star_count > 0:
                 return str(star_count)
 
-            # Tesseract sometimes outputs * instead of ★ — count trailing asterisks
-            asterisk_match = re.search(r"(?<!\*)\*+\s*$", first_line.rstrip())
+            # Tesseract sometimes outputs * instead of ★ — count trailing asterisks.
+            # Stars may be space-separated (e.g. "* *" for ★★).
+            asterisk_match = re.search(r"\*(?:\s*\*)*\s*$", first_line.rstrip())
             if asterisk_match:
-                return str(len(asterisk_match.group(0).strip()))
+                star_count = asterisk_match.group(0).count("*")
+                return str(star_count)
 
         return None
 
@@ -369,6 +371,9 @@ class DangerParser:
     )
     # Standard "Name: current/max" format
     _SPECTRUM_SLASH_RE = re.compile(r"^([\w][\w\s]+?):\s*(\d+)\s*/\s*(\d+)$")
+    # OCR-merged digit: "CATCHS / HURT OR SUBDUE 2" where "CATCHS" = "CATCH" + OCR("5")
+    # First part: all-caps with trailing OCR-digit char; second: ALL-CAPS + digit
+    _SPECTRUM_OCR_MERGED_RE = re.compile(r"^[A-Z]{2,}[SOIlZB0-9]\s*/\s*[A-Z][A-Z\s]+\s+[0-9]+$")
 
     def _is_spectrum_line(self, line: str) -> bool:
         """Return True if *line* looks like a spectrum declaration."""
@@ -386,6 +391,9 @@ class DangerParser:
             return True
         # Space-separated pairs: "CORRUPT 3 BRIBE -"
         if self._SPECTRUM_SPACE_PAIRS_RE.match(s):
+            return True
+        # OCR-merged digit: "CATCHS / HURT OR SUBDUE 2" (Tesseract merges "5" → "S" into word)
+        if self._SPECTRUM_OCR_MERGED_RE.match(s):
             return True
         return False
 
@@ -444,6 +452,8 @@ class DangerParser:
         E.g. "GET INTO TROUBLE 3 / HURT OR SUBDUE 4"
              → [("GET INTO TROUBLE","3"),("HURT OR SUBDUE","4")]
              "CORRUPT 3 BRIBE -" → [("CORRUPT","3"),("BRIBE","-")]
+             "CATCHS / HURT OR SUBDUE 2" → [("CATCH","5"),("HURT OR SUBDUE","2")]
+               (OCR-merged: Tesseract merges "CATCH 5" → "CATCHS")
         """
         parts: list[tuple[str, str]] = []
         # Split on slash first
@@ -458,6 +468,19 @@ class DangerParser:
             if m:
                 parts.append((m.group(1).strip(), m.group(2).strip()))
             else:
+                # Handle OCR-merged digit: single ALL-CAPS word with trailing OCR digit char
+                # e.g. "CATCHS" = "CATCH" + "S" where S was OCR'd from "5"
+                merged_m = re.match(r"^([A-Z]{2,})([SOIlZB])$", seg)
+                if merged_m:
+                    name_part = merged_m.group(1)
+                    digit_part = self.OCR_DIGIT_MAP.get(merged_m.group(2), merged_m.group(2))
+                    parts.append((name_part, digit_part))
+                    continue
+                # Also handle: single ALL-CAPS word with trailing real digit (e.g. "CATCH5")
+                merged_digit_m = re.match(r"^([A-Z]{2,})([0-9]+)$", seg)
+                if merged_digit_m:
+                    parts.append((merged_digit_m.group(1), merged_digit_m.group(2)))
+                    continue
                 # Try space-separated within the segment: grab consecutive pairs
                 tokens = seg.split()
                 i = 0
@@ -723,6 +746,20 @@ class DangerParser:
             "spends",
         )
 
+        # Keywords that indicate a "Name: description" split name is a condition, not a title
+        _NAME_CONDITION_STARTS = (
+            "when ",
+            "if ",
+            "whenever ",
+            "at the end",
+            "at the start",
+            "at the beginning",
+        )
+
+        # After a spectrum line, ALL non-empty non-header lines are the moves section.
+        # We use this to detect unlabelled/unbulleted move lines in OCR output.
+        past_spectrum = False
+
         # Look for all potential move lines
         lines = text.split("\n")
         i = 0
@@ -733,8 +770,9 @@ class DangerParser:
             if not line:
                 continue
 
-            # Skip spectrum lines — they are not moves
+            # Track spectrum lines — after the first spectrum, we're in the moves section
             if self._is_spectrum_line(line):
+                past_spectrum = True
                 continue
 
             # Skip section headers and other non-moves
@@ -750,7 +788,11 @@ class DangerParser:
             # 2. Bullet points (•, -, *)
             # 3. Lines containing "(hard/soft move)" markers
             # 4. Lines starting with move keywords
+            # 5. "Name: description" pattern (Title-cased name before colon) — also catches
+            #    post-spectrum custom abilities without bullets like "Stealthy: When..."
+            # 6. Post-spectrum standalone action lines (no bullet, but after spectrums)
             is_potential_move = False
+            text_content = ""
 
             # Check for custom abilities first (before stripping bullets)
             if line.startswith("**") and ":" in line:
@@ -764,6 +806,24 @@ class DangerParser:
                 text_content = line
                 is_potential_move = True
             elif any(line.lower().startswith(keyword) for keyword in _MOVE_START_KWS):
+                text_content = line
+                is_potential_move = True
+            # "Name: description" — Title-cased short name before colon; catches unbulleted
+            # custom abilities like "Stealthy: When..." and "Fence: At the beginning..."
+            elif ":" in line and not line.endswith(":") and not self._is_spectrum_line(line):
+                potential_name = line.split(":", 1)[0].strip()
+                if (
+                    2 <= len(potential_name) <= 40
+                    and potential_name[0].isupper()
+                    and not any(
+                        potential_name.lower().startswith(kw) for kw in _NAME_CONDITION_STARTS
+                    )
+                ):
+                    text_content = line
+                    is_potential_move = True
+            # Post-spectrum: standalone action lines without bullets
+            # (e.g. "Override, avoid, or escape security measures...")
+            elif past_spectrum and len(line) >= 8 and line[0].isupper() and not line.isupper():
                 text_content = line
                 is_potential_move = True
 
@@ -818,16 +878,26 @@ class DangerParser:
                 )
                 desc = desc.strip()
 
-                # Collect continuation lines until the next bullet starts
+                # Collect continuation lines until the next bullet or new "Name: description" starts
                 description_lines = [desc] if desc else []
                 while i < len(lines):
                     next_line = lines[i].strip()
                     if not next_line:
                         i += 1
                         continue
-                    # Only stop on a new bullet char — keywords may appear mid-description
+                    # Stop on a new bullet char
                     if next_line[0] in "•-*¢":
                         break
+                    # Stop on another "Name: description" pattern (next ability/move)
+                    if ":" in next_line and not next_line.endswith(":"):
+                        pn = next_line.split(":", 1)[0].strip()
+                        if (
+                            2 <= len(pn) <= 40
+                            and pn[0].isupper()
+                            and not any(pn.lower().startswith(kw) for kw in _NAME_CONDITION_STARTS)
+                            and not self._is_spectrum_line(next_line)
+                        ):
+                            break
                     description_lines.append(next_line)
                     i += 1
                     if len(description_lines) >= 10:
@@ -845,9 +915,19 @@ class DangerParser:
                     if not next_line:
                         i += 1
                         continue
-                    # Only stop on a new bullet char
+                    # Stop on a new bullet char
                     if next_line[0] in "•-*¢":
                         break
+                    # Stop on another "Name: description" pattern (next ability/move)
+                    if ":" in next_line and not next_line.endswith(":"):
+                        pn = next_line.split(":", 1)[0].strip()
+                        if (
+                            2 <= len(pn) <= 40
+                            and pn[0].isupper()
+                            and not any(pn.lower().startswith(kw) for kw in _NAME_CONDITION_STARTS)
+                            and not self._is_spectrum_line(next_line)
+                        ):
+                            break
                     desc_lines.append(next_line)
                     i += 1
                     if len(desc_lines) >= 10:
