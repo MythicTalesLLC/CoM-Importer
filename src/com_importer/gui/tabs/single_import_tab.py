@@ -218,6 +218,11 @@ class SingleImportTab(QWidget):
 
         layout.addLayout(button_layout)
 
+        # Parse status bar — single line showing parse result instead of popup dialogs
+        self.parse_status_label = QLabel("")
+        self.parse_status_label.setStyleSheet("padding: 4px; font-weight: bold;")
+        layout.addWidget(self.parse_status_label)
+
     def _create_input_selector(self) -> QTabWidget:
         """Create input method selector tabs."""
         tabs = QTabWidget()
@@ -287,14 +292,25 @@ class SingleImportTab(QWidget):
             f"(danger: {threat_conf:.0%}, character: {char_conf:.0%})"
         )
 
+    def _set_parse_status(self, msg: str, style: str = "ok") -> None:
+        """Update the parse status label. style: 'ok' | 'warn' | 'error'."""
+        colors = {"ok": "#2e7d32", "warn": "#e65100", "error": "#c62828"}
+        bg = {"ok": "#e8f5e9", "warn": "#fff3e0", "error": "#ffebee"}
+        color = colors.get(style, "#000")
+        bg_color = bg.get(style, "#fff")
+        self.parse_status_label.setStyleSheet(
+            f"padding: 4px; font-weight: bold; color: {color}; background-color: {bg_color};"
+            " border-radius: 3px;"
+        )
+        self.parse_status_label.setText(msg)
+
     def _process_image(self, file_path: str) -> None:
         """Process image file with OCR and populate text field."""
-        # Show progress dialog
-        progress = QMessageBox(self)
-        progress.setWindowTitle("Processing...")
-        progress.setText("Running OCR on image...\nThis may take a moment.")
-        progress.setStandardButtons(QMessageBox.StandardButton.NoButton)
-        progress.show()
+        self._set_parse_status("⏳ Running OCR on image…", "warn")
+        # Force UI repaint so the status shows before blocking OCR call
+        from PyQt6.QtWidgets import QApplication
+
+        QApplication.processEvents()
 
         try:
             from ...image_parser import ImageOCRFactory
@@ -314,19 +330,12 @@ class SingleImportTab(QWidget):
             # Extract text
             text = parser.parse_image(file_path)
 
-            progress.close()
-
             # Populate text field
             self.text_input.setPlainText(text)
 
-            QMessageBox.information(
-                self,
-                "OCR Complete",
-                f"Extracted {len(text)} characters from image.",
-            )
+            self._set_parse_status(f"✓ OCR complete — {len(text)} characters extracted", "ok")
 
         except Exception as e:
-            progress.close()
             QMessageBox.critical(
                 self,
                 "OCR Error",
@@ -334,6 +343,7 @@ class SingleImportTab(QWidget):
                 "Make sure Tesseract is installed (brew install tesseract on Mac) "
                 "or provide a Cloud Vision API key.",
             )
+            self._set_parse_status(f"❌ OCR failed: {e}", "error")
             logger.exception("Image OCR failed")
 
     def _select_pdf(self) -> None:
@@ -356,13 +366,11 @@ class SingleImportTab(QWidget):
                 return
 
             self.pdf_label.setText(f"Extracting page {page_num}...")
+            self._set_parse_status(f"⏳ Extracting page {page_num} from PDF…", "warn")
 
-            # Show progress
-            progress = QMessageBox(self)
-            progress.setWindowTitle("Processing...")
-            progress.setText(f"Extracting page {page_num} from PDF...\nRunning OCR...")
-            progress.setStandardButtons(QMessageBox.StandardButton.NoButton)
-            progress.show()
+            from PyQt6.QtWidgets import QApplication
+
+            QApplication.processEvents()
 
             # Extract page as image and OCR it
             image = PDFHandler.extract_page_as_image(file_path, page_num, dpi=200)
@@ -390,8 +398,6 @@ class SingleImportTab(QWidget):
                 )
                 text = parser.parse_image(temp_image_path)
 
-                progress.close()
-
                 # Populate text field
                 self.text_input.setPlainText(text)
                 self.pdf_label.setText(f"✓ Extracted page {page_num} from PDF")
@@ -399,10 +405,8 @@ class SingleImportTab(QWidget):
                 # Auto-detect actor type from extracted text
                 self._auto_detect_actor_type()
 
-                QMessageBox.information(
-                    self,
-                    "PDF OCR Complete",
-                    f"Extracted {len(text)} characters from PDF page {page_num}.",
+                self._set_parse_status(
+                    f"✓ PDF OCR complete — {len(text)} characters from page {page_num}", "ok"
                 )
 
             finally:
@@ -457,11 +461,7 @@ class SingleImportTab(QWidget):
 
         text = self.text_input.toPlainText()
         if not text.strip():
-            QMessageBox.warning(
-                self,
-                "No Input",
-                "Please enter/paste text, or select an image with drag-and-drop or Browse.",
-            )
+            self._set_parse_status("⚠ No input — paste text or load an image/PDF first.", "warn")
             return
 
         try:
@@ -475,22 +475,19 @@ class SingleImportTab(QWidget):
                 actor_label = "Character"
 
             if errors:
-                error_msg = "\n".join(f"- {e.message}" for e in errors)
-                QMessageBox.information(
-                    self,
-                    "Parsing Complete (with warnings)",
-                    f"Successfully parsed {actor_label}!\n\nWarnings:\n{error_msg}",
+                warn_summary = "; ".join(e.message for e in errors[:3])
+                suffix = f" (+{len(errors) - 3} more)" if len(errors) > 3 else ""
+                self._set_parse_status(
+                    f"⚠ {actor_label} parsed with warnings: {warn_summary}{suffix}", "warn"
                 )
             else:
-                QMessageBox.information(
-                    self, "Parsing Complete", f"{actor_label} parsed successfully!"
-                )
+                self._set_parse_status(f"✓ {actor_label} parsed successfully!", "ok")
 
             # Store the parsed actor
             self.current_actor = actor
             self.current_actor_type = self.actor_type
         except ParsingError as e:
-            QMessageBox.critical(self, "Parsing Error", f"Failed to parse: {e}")
+            self._set_parse_status(f"❌ Parse failed: {e}", "error")
 
     def _edit_actor(self) -> None:
         """Edit the parsed actor."""
@@ -503,7 +500,7 @@ class SingleImportTab(QWidget):
         dialog = EditActorDialog(self.current_actor, self)
         if dialog.exec():
             self.current_actor = dialog.get_actor()
-            QMessageBox.information(self, "Changes Saved", "Actor updated successfully!")
+            self._set_parse_status("✓ Actor edits saved.", "ok")
 
     def _show_preview(self) -> None:
         """Show JSON preview of parsed actor."""

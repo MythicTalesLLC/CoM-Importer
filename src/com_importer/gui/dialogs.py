@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import logging
 
+from PyQt6.QtCore import QEvent, QObject
+from PyQt6.QtGui import QColor, QFont, QTextCharFormat
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -21,6 +23,7 @@ from PyQt6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -43,7 +46,7 @@ logger = logging.getLogger(__name__)
 class EditActorDialog(QDialog):
     """Dialog for reviewing and editing parsed danger or character actors before creation."""
 
-    _MOVE_TYPES = ["soft", "hard", "custom"]
+    _MOVE_TYPES = ["soft", "hard", "custom", "choices"]
 
     def __init__(self, actor: DangerActor | CharacterActor, parent=None):
         """Initialize edit dialog."""
@@ -52,6 +55,7 @@ class EditActorDialog(QDialog):
         self.is_character = isinstance(actor, CharacterActor)
         self.setWindowTitle("Edit Character" if self.is_character else "Edit Danger")
         self.resize(1020, 720)
+        self._focused_bio_edit: QTextEdit | None = None  # tracks which bio edit has focus
         self._create_ui()
 
     # ------------------------------------------------------------------
@@ -90,26 +94,120 @@ class EditActorDialog(QDialog):
         self.name_input = QLineEdit(self.actor.name)
         layout.addWidget(self.name_input)
 
+        # Rich-text formatting toolbar (shared — applied to whichever bio field is focused)
+        layout.addLayout(self._create_format_toolbar())
+
         layout.addWidget(QLabel("Description:"))
-        self.description_input = QPlainTextEdit(self.actor.description)
-        self.description_input.setMaximumHeight(150)
-        self._bump_font(self.description_input)
+        self.description_input = self._make_rich_editor(self.actor.description, max_height=150)
         layout.addWidget(self.description_input)
 
         layout.addWidget(QLabel("Biography (optional):"))
-        self.biography_input = QPlainTextEdit(self.actor.biography)
-        self.biography_input.setMaximumHeight(100)
-        self._bump_font(self.biography_input)
+        self.biography_input = self._make_rich_editor(self.actor.biography, max_height=100)
         layout.addWidget(self.biography_input)
 
         layout.addWidget(QLabel("GM Notes (optional):"))
-        self.gmnotes_input = QPlainTextEdit(self.actor.gmnotes)
-        self.gmnotes_input.setMaximumHeight(100)
-        self._bump_font(self.gmnotes_input)
+        self.gmnotes_input = self._make_rich_editor(self.actor.gmnotes, max_height=100)
         layout.addWidget(self.gmnotes_input)
 
         layout.addStretch()
         return widget
+
+    def _make_rich_editor(self, text: str = "", max_height: int = 120) -> QTextEdit:
+        """Create a QTextEdit pre-loaded with *text*, bumped font, and focus tracking."""
+        edit = QTextEdit()
+        edit.setMaximumHeight(max_height)
+        self._bump_font(edit)
+        # Load HTML if content looks like HTML, otherwise plain text
+        if text and text.lstrip().startswith("<"):
+            edit.setHtml(text)
+        else:
+            edit.setPlainText(text)
+        # Track focus so the format toolbar knows which editor to target
+        edit.installEventFilter(self)
+        return edit
+
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
+        """Track which bio text editor is focused so the format toolbar can target it."""
+        if event.type() == QEvent.Type.FocusIn and isinstance(obj, QTextEdit):
+            if obj in (self.description_input, self.biography_input, self.gmnotes_input):
+                self._focused_bio_edit = obj
+        return super().eventFilter(obj, event)
+
+    def _create_format_toolbar(self) -> QHBoxLayout:
+        """Build the shared rich-text formatting toolbar for bio fields."""
+        row = QHBoxLayout()
+        row.setSpacing(4)
+        row.addWidget(QLabel("Format:"))
+
+        italic_btn = QPushButton("𝐼")
+        italic_btn.setToolTip("Italic (apply to selected text)")
+        italic_btn.setFixedWidth(30)
+        italic_btn.setStyleSheet("font-style: italic; font-weight: bold;")
+        italic_btn.clicked.connect(self._apply_italic)
+        row.addWidget(italic_btn)
+
+        underline_btn = QPushButton("U̲")
+        underline_btn.setToolTip("Underline (apply to selected text)")
+        underline_btn.setFixedWidth(30)
+        underline_btn.setStyleSheet("text-decoration: underline; font-weight: bold;")
+        underline_btn.clicked.connect(self._apply_underline)
+        row.addWidget(underline_btn)
+
+        for label, color_hex, tooltip in [
+            ("H", "#90EE90", "Highlight Green"),
+            ("H", "#FF9999", "Highlight Red"),
+            ("H", "#FFFF88", "Highlight Yellow"),
+        ]:
+            btn = QPushButton(label)
+            btn.setToolTip(tooltip)
+            btn.setFixedWidth(30)
+            btn.setStyleSheet(
+                f"background-color: {color_hex}; font-weight: bold; border: 1px solid #aaa;"
+            )
+            btn.clicked.connect(lambda checked, c=color_hex: self._apply_highlight(c))
+            row.addWidget(btn)
+
+        clear_btn = QPushButton("✕ Clear")
+        clear_btn.setToolTip("Clear all formatting on selected text")
+        clear_btn.clicked.connect(self._clear_format)
+        row.addWidget(clear_btn)
+
+        row.addStretch()
+        return row
+
+    def _apply_italic(self) -> None:
+        ed = self._focused_bio_edit
+        if not ed:
+            return
+        fmt = QTextCharFormat()
+        fmt.setFontItalic(not ed.currentCharFormat().fontItalic())
+        ed.mergeCurrentCharFormat(fmt)
+
+    def _apply_underline(self) -> None:
+        ed = self._focused_bio_edit
+        if not ed:
+            return
+        fmt = QTextCharFormat()
+        fmt.setFontUnderline(not ed.currentCharFormat().fontUnderline())
+        ed.mergeCurrentCharFormat(fmt)
+
+    def _apply_highlight(self, color_hex: str) -> None:
+        ed = self._focused_bio_edit
+        if not ed:
+            return
+        fmt = QTextCharFormat()
+        fmt.setBackground(QColor(color_hex))
+        ed.mergeCurrentCharFormat(fmt)
+
+    def _clear_format(self) -> None:
+        ed = self._focused_bio_edit
+        if not ed:
+            return
+        fmt = QTextCharFormat()
+        fmt.setFontItalic(False)
+        fmt.setFontUnderline(False)
+        fmt.setBackground(QColor("transparent"))
+        ed.mergeCurrentCharFormat(fmt)
 
     def _create_danger_details_tab(self) -> QWidget:
         widget = QWidget()
@@ -432,9 +530,10 @@ class EditActorDialog(QDialog):
     def _apply_edits(self) -> None:
         """Write all UI values back into self.actor."""
         self.actor.name = self.name_input.text().strip()
-        self.actor.description = self.description_input.toPlainText().strip()
-        self.actor.biography = self.biography_input.toPlainText().strip()
-        self.actor.gmnotes = self.gmnotes_input.toPlainText().strip()
+        # Preserve rich text (HTML) if the document has any formatting; otherwise plain text
+        self.actor.description = self._rich_text_value(self.description_input)
+        self.actor.biography = self._rich_text_value(self.biography_input)
+        self.actor.gmnotes = self._rich_text_value(self.gmnotes_input)
 
         if self.is_character:
             ch: CharacterActor = self.actor  # type: ignore[assignment]
@@ -466,13 +565,18 @@ class EditActorDialog(QDialog):
                 name_item = self.moves_table.item(row, 0)
                 type_widget = self.moves_table.cellWidget(row, 1)
                 desc_item = self.moves_table.item(row, 2)
-                if name_item and name_item.text().strip():
-                    move_type_str = type_widget.currentText() if type_widget else "soft"
+                move_type_str = type_widget.currentText() if type_widget else "soft"
+                try:
                     move_type = MoveType(move_type_str)
-                    desc = desc_item.text().strip() if desc_item else ""
+                except ValueError:
+                    move_type = MoveType.SOFT
+                name = name_item.text().strip() if name_item else ""
+                desc = desc_item.text().strip() if desc_item else ""
+                # "choices" rows may have an empty name — only skip truly blank rows
+                if name or (move_type == MoveType.CHOICES and desc):
                     d.gm_moves.append(
                         GMMove(
-                            name=name_item.text().strip(),
+                            name=name,
                             description=desc,
                             move_type=move_type,
                         )
@@ -519,9 +623,33 @@ class EditActorDialog(QDialog):
         return self.actor
 
     @staticmethod
-    def _mono_font():
-        from PyQt6.QtGui import QFont
+    def _rich_text_value(edit: QTextEdit) -> str:
+        """Return HTML if the document has non-default character formatting, else plain text."""
+        doc = edit.document()
+        it = doc.begin()
+        has_formatting = False
+        while it != doc.end():
+            block_it = it.begin()
+            while not block_it.atEnd():
+                frag = block_it.fragment()
+                fmt = frag.charFormat()
+                if (
+                    fmt.fontItalic()
+                    or fmt.fontUnderline()
+                    or fmt.background().color().isValid()
+                    and fmt.background().color().alpha() > 0
+                    and fmt.background().color() != QColor("transparent")
+                ):
+                    has_formatting = True
+                    break
+                block_it += 1
+            if has_formatting:
+                break
+            it = it.next()
+        return edit.toHtml() if has_formatting else edit.toPlainText().strip()
 
+    @staticmethod
+    def _mono_font():
         font = QFont("Menlo")
         if not font.exactMatch():
             font = QFont("Courier New")

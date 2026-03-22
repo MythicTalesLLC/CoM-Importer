@@ -20,6 +20,7 @@ class MoveType(str, Enum):
     SOFT = "soft"
     HARD = "hard"
     CUSTOM = "custom"
+    CHOICES = "choices"  # Preamble / aggregator text preceding a list of hard or soft moves
     INTRUSION = "intrusion"
     ENTRANCE = "entrance"
     DOWNTIME = "downtime"
@@ -87,12 +88,15 @@ class GMMove:
 
     def to_foundry_item(self) -> dict[str, Any]:
         """Convert to Foundry item JSON format."""
+        # "choices" is an aggregator/preamble — Foundry doesn't know this type, so
+        # output as soft with the name hidden so only the description (the choice text) shows.
+        foundry_subtype = "soft" if self.move_type == MoveType.CHOICES else self.move_type.value
         system: dict[str, Any] = {
             "description": self.description,
-            "subtype": self.move_type.value,
+            "subtype": foundry_subtype,
             "taglist": self.tags,
             "statuslist": self.statuses,
-            "hideName": self.hide_name,
+            "hideName": self.hide_name or (self.move_type == MoveType.CHOICES),
             "header": self.header,
             "locked": False,
             "version": "3.0.0",
@@ -102,7 +106,7 @@ class GMMove:
         if self.effect_type:
             system["effectType"] = self.effect_type
         return {
-            "name": self.name,
+            "name": self.name or "(choices)",
             "type": "gmmove",
             "system": system,
         }
