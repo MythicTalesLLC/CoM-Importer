@@ -127,10 +127,23 @@ class EditActorDialog(QDialog):
         return edit
 
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:
-        """Track which bio text editor is focused so the format toolbar can target it."""
-        if event.type() == QEvent.Type.FocusIn and isinstance(obj, QTextEdit):
-            if obj in (self.description_input, self.biography_input, self.gmnotes_input):
-                self._focused_bio_edit = obj
+        """Track which bio text editor is focused so the format toolbar can target it.
+
+        Uses getattr so that events fired during widget construction (before all
+        three editors are fully assigned) do not raise AttributeError and cause
+        PyQt6 to call abort().
+        """
+        try:
+            if event.type() == QEvent.Type.FocusIn and isinstance(obj, QTextEdit):
+                bio_editors = (
+                    getattr(self, "description_input", None),
+                    getattr(self, "biography_input", None),
+                    getattr(self, "gmnotes_input", None),
+                )
+                if obj in bio_editors:
+                    self._focused_bio_edit = obj
+        except Exception:
+            logger.exception("Unexpected error in eventFilter")
         return super().eventFilter(obj, event)
 
     def _create_format_toolbar(self) -> QHBoxLayout:
@@ -176,38 +189,50 @@ class EditActorDialog(QDialog):
         return row
 
     def _apply_italic(self) -> None:
-        ed = self._focused_bio_edit
-        if not ed:
-            return
-        fmt = QTextCharFormat()
-        fmt.setFontItalic(not ed.currentCharFormat().fontItalic())
-        ed.mergeCurrentCharFormat(fmt)
+        try:
+            ed = self._focused_bio_edit
+            if not ed:
+                return
+            fmt = QTextCharFormat()
+            fmt.setFontItalic(not ed.currentCharFormat().fontItalic())
+            ed.mergeCurrentCharFormat(fmt)
+        except Exception:
+            logger.exception("Error applying italic")
 
     def _apply_underline(self) -> None:
-        ed = self._focused_bio_edit
-        if not ed:
-            return
-        fmt = QTextCharFormat()
-        fmt.setFontUnderline(not ed.currentCharFormat().fontUnderline())
-        ed.mergeCurrentCharFormat(fmt)
+        try:
+            ed = self._focused_bio_edit
+            if not ed:
+                return
+            fmt = QTextCharFormat()
+            fmt.setFontUnderline(not ed.currentCharFormat().fontUnderline())
+            ed.mergeCurrentCharFormat(fmt)
+        except Exception:
+            logger.exception("Error applying underline")
 
     def _apply_highlight(self, color_hex: str) -> None:
-        ed = self._focused_bio_edit
-        if not ed:
-            return
-        fmt = QTextCharFormat()
-        fmt.setBackground(QColor(color_hex))
-        ed.mergeCurrentCharFormat(fmt)
+        try:
+            ed = self._focused_bio_edit
+            if not ed:
+                return
+            fmt = QTextCharFormat()
+            fmt.setBackground(QColor(color_hex))
+            ed.mergeCurrentCharFormat(fmt)
+        except Exception:
+            logger.exception("Error applying highlight")
 
     def _clear_format(self) -> None:
-        ed = self._focused_bio_edit
-        if not ed:
-            return
-        fmt = QTextCharFormat()
-        fmt.setFontItalic(False)
-        fmt.setFontUnderline(False)
-        fmt.setBackground(QColor("transparent"))
-        ed.mergeCurrentCharFormat(fmt)
+        try:
+            ed = self._focused_bio_edit
+            if not ed:
+                return
+            fmt = QTextCharFormat()
+            fmt.setFontItalic(False)
+            fmt.setFontUnderline(False)
+            fmt.setBackground(QColor(0, 0, 0, 0))  # fully transparent
+            ed.mergeCurrentCharFormat(fmt)
+        except Exception:
+            logger.exception("Error clearing format")
 
     def _create_danger_details_tab(self) -> QWidget:
         widget = QWidget()
@@ -516,7 +541,12 @@ class EditActorDialog(QDialog):
     # ------------------------------------------------------------------
 
     def _update_preview(self) -> None:
-        self._apply_edits()
+        try:
+            self._apply_edits()
+        except Exception:
+            logger.exception("Error applying edits for preview")
+            self.preview_text.setPlainText("Error reading fields — see log for details.")
+            return
         try:
             if self.is_character:
                 actor_json = convert_character_to_foundry(self.actor)
@@ -607,23 +637,27 @@ class EditActorDialog(QDialog):
                     d.statuses.append(DangerStatus(name=name_item.text().strip(), tier=tier))
 
     def _on_save(self) -> None:
-        self._apply_edits()
-        errors = self.actor.validate()
-        if errors:
-            msg = QMessageBox(self)
-            msg.setWindowTitle("Validation Warnings")
-            msg.setIcon(QMessageBox.Icon.Warning)
-            msg.setText(
-                "The following issues were found:\n\n" + "\n".join(f"• {e}" for e in errors)
-            )
-            msg.setInformativeText("Save anyway?")
-            msg.setStandardButtons(
-                QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Cancel
-            )
-            msg.setDefaultButton(QMessageBox.StandardButton.Cancel)
-            if msg.exec() != QMessageBox.StandardButton.Save:
-                return
-        self.accept()
+        try:
+            self._apply_edits()
+            errors = self.actor.validate()
+            if errors:
+                msg = QMessageBox(self)
+                msg.setWindowTitle("Validation Warnings")
+                msg.setIcon(QMessageBox.Icon.Warning)
+                msg.setText(
+                    "The following issues were found:\n\n" + "\n".join(f"• {e}" for e in errors)
+                )
+                msg.setInformativeText("Save anyway?")
+                msg.setStandardButtons(
+                    QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Cancel
+                )
+                msg.setDefaultButton(QMessageBox.StandardButton.Cancel)
+                if msg.exec() != QMessageBox.StandardButton.Save:
+                    return
+            self.accept()
+        except Exception:
+            logger.exception("Error saving actor")
+            QMessageBox.critical(self, "Save Error", "An unexpected error occurred while saving.")
 
     def get_actor(self) -> DangerActor | CharacterActor:
         """Return the (possibly edited) actor."""
@@ -631,17 +665,22 @@ class EditActorDialog(QDialog):
 
     @staticmethod
     def _rich_text_value(edit: QTextEdit) -> str:
-        """Return HTML if the document has non-default character formatting, else plain text.
+        """Return HTML if the document has user-applied character formatting, else plain text.
 
-        Avoids iterating QTextBlock/QTextFragment objects directly (fragile in PyQt6);
-        instead inspects the serialised HTML for known formatting markers.
+        Checks for inline formatting elements (<i>, <u>, <span>) that appear only when
+        the user has applied italic, underline, or highlight.  Avoids matching the
+        document-level body/paragraph CSS that Qt always emits (including the
+        background-color Qt injects in macOS dark mode).
         """
+        plain = edit.toPlainText().strip()
+        if not plain:
+            return ""
         html = edit.toHtml()
-        has_formatting = any(
-            marker in html
-            for marker in ("font-style:italic", "text-decoration:", "background-color:")
-        )
-        return html if has_formatting else edit.toPlainText().strip()
+        # Inline formatting only: spans or explicit italic/underline tags appear in body content
+        body_start = html.find("<body")
+        body_content = html[body_start:] if body_start >= 0 else html
+        has_formatting = "<span " in body_content or "<i>" in body_content or "<u>" in body_content
+        return html if has_formatting else plain
 
     @staticmethod
     def _mono_font():
