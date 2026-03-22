@@ -44,6 +44,11 @@ class DangerToActorConverter:
         if actor_id is None:
             actor_id = str(uuid.uuid4())
 
+        # Build star-rating alias from danger_rating (e.g. "3" → "★★★", "+2" → "+★★")
+        if not danger.alias or danger.alias == "?????":
+            if danger.danger_rating:
+                danger.alias = self._rating_to_stars(str(danger.danger_rating))
+
         # Parse bracket syntax in moves to auto-create tags/statuses
         self._parse_bracket_syntax(danger)
 
@@ -196,6 +201,29 @@ class DangerToActorConverter:
             if status.lower() not in existing_status_names
         }
 
+    @staticmethod
+    def _rating_to_stars(rating: str) -> str:
+        """Convert a danger rating string to a Unicode star string.
+
+        Examples:
+            "3"  → "★★★"
+            "+2" → "+★★"
+        """
+        rating = rating.strip()
+        if rating.startswith("+"):
+            suffix = rating[1:].strip()
+            try:
+                count = int(suffix)
+                return "+" + "★" * count
+            except ValueError:
+                pass
+        else:
+            try:
+                return "★" * int(rating)
+            except ValueError:
+                pass
+        return rating
+
     def _enhance_actor(self, actor_json: dict[str, Any]) -> None:
         """
         Apply enhancements and validations to the actor JSON.
@@ -205,7 +233,7 @@ class DangerToActorConverter:
         """
         system = actor_json.get("system", {})
 
-        # Ensure required fields have defaults
+        # Ensure required fields have defaults (don't overwrite star alias set in convert())
         if not system.get("alias"):
             system["alias"] = "?????"
         if "useAlias" not in system:
