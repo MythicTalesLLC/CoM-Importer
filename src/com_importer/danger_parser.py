@@ -20,6 +20,7 @@ from .com_schema import (
     Tag,
     TagType,
 )
+from .danger_transform import normalize_danger_text
 
 
 @dataclass
@@ -93,6 +94,9 @@ class DangerParser:
         if not text:
             self.errors.append(ParsingError("input", "Input text is empty", "error"))
             return self._empty_danger(), self.errors
+
+        # Normalize text (fixes OCR artifacts, preserves bullet lines, etc.)
+        text = normalize_danger_text(text)
 
         # Extract sections
         name = self._extract_name(text)

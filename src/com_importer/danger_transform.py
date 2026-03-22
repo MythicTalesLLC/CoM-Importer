@@ -44,33 +44,28 @@ def normalize_danger_text(text: str) -> str:
 
 
 def _fix_ocr_artifacts(text: str) -> str:
-    """Fix common OCR misreadings."""
+    """Fix common OCR misreadings that are safe and unambiguous."""
     replacements = {
-        r"\b0\b": "O",  # Zero sometimes read as O
-        r"\b1\b": "I",  # One sometimes read as I
-        r"\b[l1]\b": "l",  # Inconsistent letter L
-        "rn": "m",  # Common OCR confusion (context-dependent)
         "vvhat": "what",
         "vvill": "will",
         "vvhen": "when",
     }
 
     for pattern, replacement in replacements.items():
-        text = re.sub(pattern, replacement, text)
+        text = text.replace(pattern, replacement)
 
     # Fix known City of Mist terms that might be misread
     com_terms_fixes = {
+        r"Spectmum": "Spectrum",  # rn→m OCR artifact in the word Spectrum
         r"Mythos": "Mythos",
         r"Logos": "Logos",
-        r"Spectrum": "Spectrum",
-        r"Theme": "Theme",
-        r"Tag": "Tag",
-        r"Status": "Status",
+        r"Spectrurn": "Spectrum",  # another common OCR variant
     }
 
     for term, correct in com_terms_fixes.items():
-        # Case-insensitive replacement (do NOT lowercase the entire text)
         text = re.sub(term, correct, text, flags=re.IGNORECASE)
+
+    return text
 
     return text
 
@@ -79,10 +74,12 @@ def _normalize_line_breaks(text: str) -> str:
     """
     Normalize line breaks.
 
-    Preserves paragraph breaks (double newlines) and bullet-point lines.
-    Merges only soft-wrapped continuation lines (no bullet at start).
+    Rules:
+    - Bullet lines (starting with •, -, *, ¢) start a new item; their
+      soft-wrapped continuation lines are merged into them.
+    - Non-bullet lines (field labels, prose) are always kept on their own line.
+    - Paragraph breaks (double newlines) are preserved.
     """
-    # Preserve paragraph breaks
     paragraphs = re.split(r"\n{2,}", text)
 
     normalized_paragraphs = []
@@ -93,15 +90,23 @@ def _normalize_line_breaks(text: str) -> str:
         for line in lines:
             stripped = line.strip()
             if not stripped:
+                if current:
+                    result_lines.append(current)
+                    current = ""
                 continue
-            # Lines starting with a bullet char start a new item — flush current
             if stripped[0] in "•-*¢":
+                # Start of a new bullet item — flush previous
                 if current:
                     result_lines.append(current)
                 current = stripped
+            elif current and current[0] in "•-*¢":
+                # Soft-wrapped continuation of the current bullet item
+                current = current + " " + stripped
             else:
-                # Soft-wrapped continuation — append to current
-                current = (current + " " + stripped).strip() if current else stripped
+                # Non-bullet standalone line (field label, prose, header) — keep separate
+                if current:
+                    result_lines.append(current)
+                current = stripped
         if current:
             result_lines.append(current)
         if result_lines:
