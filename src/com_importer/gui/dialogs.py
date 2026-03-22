@@ -468,10 +468,13 @@ class EditActorDialog(QDialog):
 
     @staticmethod
     def _bump_font(widget, delta: int = 2) -> None:
-        """Increase widget font size by delta points above the current default."""
+        """Increase widget font size by delta points above the application default."""
+        from PyQt6.QtWidgets import QApplication
+
         font = widget.font()
-        size = font.pointSize()
-        font.setPointSize((size if size > 0 else 13) + delta)
+        base = QApplication.font().pointSize()
+        base = base if base > 0 else 13
+        font.setPointSize(base + delta)
         widget.setFont(font)
 
 

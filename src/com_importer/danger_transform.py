@@ -69,13 +69,8 @@ def _fix_ocr_artifacts(text: str) -> str:
     }
 
     for term, correct in com_terms_fixes.items():
-        # Case-insensitive replacement
-        text = re.sub(
-            term,
-            correct,
-            text.lower(),
-            flags=re.IGNORECASE,
-        )
+        # Case-insensitive replacement (do NOT lowercase the entire text)
+        text = re.sub(term, correct, text, flags=re.IGNORECASE)
 
     return text
 
@@ -84,19 +79,33 @@ def _normalize_line_breaks(text: str) -> str:
     """
     Normalize line breaks.
 
-    Preserves paragraph breaks (double newlines) but merges single line breaks.
+    Preserves paragraph breaks (double newlines) and bullet-point lines.
+    Merges only soft-wrapped continuation lines (no bullet at start).
     """
     # Preserve paragraph breaks
     paragraphs = re.split(r"\n{2,}", text)
 
     normalized_paragraphs = []
     for para in paragraphs:
-        # Remove line breaks within paragraphs but preserve them
-        para = para.replace("\n", " ")
-        # Clean up extra spaces
-        para = re.sub(r" +", " ", para).strip()
-        if para:
-            normalized_paragraphs.append(para)
+        lines = para.split("\n")
+        result_lines: list[str] = []
+        current = ""
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            # Lines starting with a bullet char start a new item — flush current
+            if stripped[0] in "•-*¢":
+                if current:
+                    result_lines.append(current)
+                current = stripped
+            else:
+                # Soft-wrapped continuation — append to current
+                current = (current + " " + stripped).strip() if current else stripped
+        if current:
+            result_lines.append(current)
+        if result_lines:
+            normalized_paragraphs.append("\n".join(result_lines))
 
     return "\n\n".join(normalized_paragraphs)
 

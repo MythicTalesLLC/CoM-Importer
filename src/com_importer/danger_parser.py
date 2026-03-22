@@ -851,6 +851,14 @@ class DangerParser:
 
                 desc = " ".join(desc_lines).strip()
 
+            # Defence-in-depth: if line normalization left embedded bullet chars in the
+            # description (e.g. "takes trouble-1. ¢ Tragedy: ..."), truncate there.
+            for _bchar in "•¢":
+                _bpos = desc.find(_bchar)
+                if _bpos >= 0:
+                    desc = desc[:_bpos].strip()
+                    break
+
             if name and name.strip():
                 # Clean up bold markers (** or __) from name
                 cleaned_name = name.strip().replace("**", "").replace("__", "").strip()

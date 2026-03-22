@@ -53,7 +53,7 @@ class TestDangerParsing:
         text = "  Zeus\n\n\nDanger Rating 3  "
         normalized = normalize_danger_text(text)
 
-        assert normalized.startswith("zeus")  # normalize_danger_text lowercases
+        assert normalized.startswith("Zeus")  # case preserved
         assert "danger rating 3" in normalized.lower()
 
     def test_danger_validation(self):
