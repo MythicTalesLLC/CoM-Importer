@@ -167,8 +167,9 @@ class DangerParser:
             if line and not line.startswith("•") and len(line) < 100:
                 # First substantial line that isn't a bullet
                 name = line
-                # Remove stars (★ and ⭐) which represent danger level
+                # Remove stars (★, ⭐) and OCR asterisks at end of line (danger level)
                 name = re.sub(r"[★⭐]+\s*", "", name).strip()
+                name = re.sub(r"\s*\*+\s*$", "", name).strip()
                 # Remove trailing garbage like "kk *&" by keeping only reasonable characters
                 # Keep only: letters, numbers, spaces, hyphens, apostrophes
                 cleaned = re.sub(r"[^a-zA-Z0-9\s\-'].*$", "", name).strip()
@@ -212,6 +213,11 @@ class DangerParser:
             star_count = first_line.count("★") + first_line.count("⭐")
             if star_count > 0:
                 return str(star_count)
+
+            # Tesseract sometimes outputs * instead of ★ — count trailing asterisks
+            asterisk_match = re.search(r"(?<!\*)\*+\s*$", first_line.rstrip())
+            if asterisk_match:
+                return str(len(asterisk_match.group(0).strip()))
 
         return None
 
@@ -769,7 +775,8 @@ class DangerParser:
 
             # Determine move type based on schema rules:
             # - Contains "(hard move)" → HARD
-            # - Starts with **NAME:** → CUSTOM (custom ability)
+            # - Starts with **NAME:** → CUSTOM (custom ability / bold-named move)
+            # - Bullet with "Name: description" (short non-condition name before colon) → CUSTOM
             # - Otherwise (bullet point) → SOFT
             move_type = MoveType.SOFT  # Default for bullets
 
@@ -780,6 +787,15 @@ class DangerParser:
             # Check if it's a custom ability (bold block with colon)
             elif text_content.startswith("**") and ":" in text_content:
                 move_type = MoveType.CUSTOM
+                name = text_content
+            # "Name: description" pattern with a title-like name → CUSTOM move
+            elif ":" in text_content:
+                potential_name = text_content.split(":", 1)[0].strip()
+                _condition_starts = ("when ", "if ", "whenever ", "at the end", "at the start")
+                if len(potential_name) <= 60 and not any(
+                    potential_name.lower().startswith(kw) for kw in _condition_starts
+                ):
+                    move_type = MoveType.CUSTOM
                 name = text_content
             else:
                 name = text_content
@@ -798,35 +814,24 @@ class DangerParser:
                 )
                 desc = desc.strip()
 
-                # Collect continuation lines for multi-line descriptions
+                # Collect continuation lines until the next bullet starts
                 description_lines = [desc] if desc else []
                 while i < len(lines):
                     next_line = lines[i].strip()
                     if not next_line:
                         i += 1
                         continue
-                    # Check if this is a new move (bullet point or keyword at start)
-                    if next_line[0] in "•-*¢" or any(
-                        next_line.lower().startswith(kw) for kw in _MOVE_START_KWS
-                    ):
+                    # Only stop on a new bullet char — keywords may appear mid-description
+                    if next_line[0] in "•-*¢":
                         break
-
-                    # If previous line had unclosed parens, always continue
-                    if description_lines:
-                        last_line = description_lines[-1]
-                        open_parens = last_line.count("(") - last_line.count(")")
-                        if open_parens > 0:
-                            pass  # fall through to append
-
                     description_lines.append(next_line)
                     i += 1
-
                     if len(description_lines) >= 10:
                         break
 
                 desc = " ".join(description_lines).strip()
             else:
-                # For simple moves without colons, collect multi-line as well
+                # For simple moves without colons, collect continuation lines until next bullet
                 desc_lines = [text_content]
                 if "(" in name:
                     name = name.split("(")[0].strip()
@@ -836,22 +841,13 @@ class DangerParser:
                     if not next_line:
                         i += 1
                         continue
-                    if next_line[0] in "•-*¢" or any(
-                        next_line.lower().startswith(kw) for kw in _MOVE_START_KWS
-                    ):
+                    # Only stop on a new bullet char
+                    if next_line[0] in "•-*¢":
                         break
-
-                    if desc_lines:
-                        last_line = desc_lines[-1]
-                        open_parens = last_line.count("(") - last_line.count(")")
-                        if open_parens > 0:
-                            desc_lines.append(next_line)
-                            i += 1
-                            if len(desc_lines) >= 10:
-                                break
-                            continue
-
-                    break
+                    desc_lines.append(next_line)
+                    i += 1
+                    if len(desc_lines) >= 10:
+                        break
 
                 desc = " ".join(desc_lines).strip()
 
@@ -863,6 +859,10 @@ class DangerParser:
                 inline_statuses, inline_tags, is_optional, effect_type = (
                     self._extract_inline_move_metadata(desc)
                 )
+
+                # If a SOFT move gives a status/tag, promote it to HARD
+                if move_type == MoveType.SOFT and inline_statuses:
+                    move_type = MoveType.HARD
 
                 # Separate custom abilities from GM moves
                 if move_type == MoveType.CUSTOM and text_content.startswith("**"):
