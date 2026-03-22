@@ -37,6 +37,9 @@ class DangerParser:
     # Pattern to match danger rating (e.g., "Danger Rating: 3" or "Rating 3")
     DANGER_RATING_PATTERN = r"(?:danger\s+)?rating[:\s]+(\d+)"
 
+    # Pattern for additive Mythos Power Set rating (+★ or +1 etc.)
+    MYTHOS_POWER_SET_PATTERN = r"\+[★⭐]+|\+\s*\d+\s*[★⭐]"
+
     # Pattern to detect move types in text
     HARD_MOVE_PATTERN = r"hard\s+(?:danger\s+)?move"
     SOFT_MOVE_PATTERN = r"soft\s+(?:danger\s+)?move|soft\s+(?:move|option)"
@@ -47,12 +50,6 @@ class DangerParser:
 
     # Pattern to detect spectrum entries (e.g., "Hurt: 0/4", "Health: 1/5")
     SPECTRUM_PATTERN = r"([\w\s]+?):\s*(\d+)/(\d+)"  # "Name: current/max" format
-    # Alternative pattern for "GET INTO TROUBLE X / HURT OR SUBDUE Y" format
-    # Also matches space-separated: "HURT OR SUBDUE 3 THREATEN -"
-    # Also matches OCR'd numbers (S→5, O→0, l→1, I→1) or incomplete (-)
-    SPECTRUM_ALT_PATTERN = (
-        r"([A-Z][A-Z\s]+?)\s+([0-9SOIl-]+)(?:\s*/\s*|\s+)([A-Z][A-Z\s]+?)\s+([0-9SOIl-]*)"
-    )
 
     # OCR correction mapping for common misreads in spectrum values
     OCR_DIGIT_MAP = {
@@ -66,6 +63,15 @@ class DangerParser:
 
     # Pattern for tags in brackets
     TAG_PATTERN = r"\[([^\]]+)\]"
+
+    # Status in parentheses: (word-word-N) - ends in a digit
+    STATUS_IN_PARENS_RE = re.compile(r"\(([\w][\w-]*-\d+)\)")
+
+    # Story tag in parentheses: (word) or (multi word) - no trailing digit
+    STORY_TAG_IN_PARENS_RE = re.compile(r"\(([a-zA-Z][a-zA-Z\s-]{1,30})\)")
+
+    # Collective/Vehicle/Team note at the start of a line
+    COLLECTIVE_LINE_RE = re.compile(r"^(?:Collective|Vehicle|Team)[:\s]+(.+)", re.IGNORECASE)
 
     def __init__(self) -> None:
         """Initialize the parser."""
@@ -94,12 +100,14 @@ class DangerParser:
         logos = self._extract_logos(text)
         description = self._extract_description(text)
         danger_rating = self._extract_danger_rating(text)
+        is_mythos_power_set = self._detect_mythos_power_set(text)
 
         # Extract structured elements
-        spectrums = self._extract_spectrums(text)
+        spectrums = [] if is_mythos_power_set else self._extract_spectrums(text)
         gm_moves, custom_abilities = self._extract_moves(text)
         tags = self._extract_tags_from_text(text)
         statuses = self._extract_statuses(text)
+        collective_size, collective_note = self._extract_collective(text)
 
         # Build danger actor
         danger = DangerActor(
@@ -108,11 +116,14 @@ class DangerParser:
             logos=logos,
             description=description,
             danger_rating=danger_rating,
+            is_mythos_power_set=is_mythos_power_set,
             gm_moves=gm_moves,
             custom_abilities=custom_abilities,
             spectrums=spectrums,
             tags=tags,
             statuses=statuses,
+            collective_size=collective_size,
+            collective_note=collective_note,
         )
 
         # Validation
@@ -125,6 +136,28 @@ class DangerParser:
     def _empty_danger(self) -> DangerActor:
         """Return an empty danger actor."""
         return DangerActor(name="Untitled Danger")
+
+    def _strip_section_prefix(self, line: str) -> str:
+        """Strip common OCR section prefixes from the start of a line.
+
+        Some rulebooks have section labels (ACT, HARD, SOFT) before move names
+        that OCR picks up. This strips them to reveal the actual move.
+
+        Examples:
+            "ACT Inquisitive: ..." → "Inquisitive: ..."
+            "HARD MOVE Brutally bludgeon: ..." → "Brutally bludgeon: ..."
+        """
+        if not line:
+            return line
+
+        prefixes = ("act ", "hard move ", "soft move ", "hard ", "soft ")
+        line_lower = line.lower()
+
+        for prefix in prefixes:
+            if line_lower.startswith(prefix):
+                return line[len(prefix) :].strip()
+
+        return line
 
     def _extract_name(self, text: str) -> str:
         """Extract the danger name (usually first line or first bold text)."""
@@ -157,6 +190,7 @@ class DangerParser:
         Looks for:
         - "Rating 3" or "Danger Rating: 3"
         - Stars: ★★★ or ⭐⭐⭐ (count them)
+        - Additive Mythos Power Set: +★ or +★★
         """
         # First try the standard pattern
         match = re.search(self.DANGER_RATING_PATTERN, text, re.IGNORECASE)
@@ -167,12 +201,58 @@ class DangerParser:
         lines = text.split("\n")
         if lines:
             first_line = lines[0]
-            # Count filled stars
+            # Check for additive Mythos Power Set format (+★)
+            additive_match = re.search(self.MYTHOS_POWER_SET_PATTERN, first_line)
+            if additive_match:
+                # Count additive stars
+                star_count = first_line.count("★") + first_line.count("⭐")
+                return f"+{star_count}" if star_count > 0 else "+1"
+
+            # Count filled stars for standard rating
             star_count = first_line.count("★") + first_line.count("⭐")
             if star_count > 0:
                 return str(star_count)
 
         return None
+
+    def _detect_mythos_power_set(self, text: str) -> bool:
+        """Detect whether this entry is a Mythos Power Set (additive +★ rating, no spectrum)."""
+        lines = text.split("\n")
+        if lines:
+            first_line = lines[0]
+            if re.search(self.MYTHOS_POWER_SET_PATTERN, first_line):
+                return True
+        return False
+
+    def _extract_collective(self, text: str) -> tuple[int, str]:
+        """Extract collective size and note from Collective/Vehicle/Team lines.
+
+        Returns:
+            Tuple of (collective_size, collective_note)
+        """
+        collective_size = 0
+        collective_note = ""
+
+        for line in text.split("\n"):
+            stripped = line.strip()
+            m = self.COLLECTIVE_LINE_RE.match(stripped)
+            if m:
+                note = m.group(1).strip()
+                collective_note = note
+
+                # Try to extract a number from the note as the size factor
+                size_match = re.search(r"\b(\d+)\b", note)
+                if size_match:
+                    collective_size = int(size_match.group(1))
+                elif re.search(r"\bmany\b|\blarge\b|\bnumerous\b", note, re.IGNORECASE):
+                    collective_size = 5
+                elif re.search(r"\bfew\b|\bsmall\b", note, re.IGNORECASE):
+                    collective_size = 2
+                else:
+                    collective_size = 1
+                break
+
+        return collective_size, collective_note
 
     def _extract_mythos(self, text: str) -> str:
         """Extract mythos (mythic identity) from text."""
@@ -206,46 +286,53 @@ class DangerParser:
         in_description = False
 
         for line in lines:
-            stripped = line.strip().lower()
+            stripped = line.strip()
+            stripped_lower = stripped.lower()
 
             # Skip empty lines at the start
-            if not in_description and not line.strip():
+            if not in_description and not stripped:
                 continue
 
-            # Stop if we hit a section marker
-            # Recognized section starters:
-            # - Standard: "keyword:" (mythos:, logos:, rating:, spectrum:, move:, tag:, status:)
-            # - Spectrum format: "NAME NUMBER / NAME NUMBER" (all caps)
-            # - Bullet points: "• " or "- " (moves/abilities)
             if stripped:
-                # Check for standard section headers
-                if re.match(r"^(mythos|logos|rating|spectrum|move|tag|status)[:\s]", stripped):
+                # Stop at standard section headers
+                if re.match(
+                    r"^(mythos|logos|rating|spectrum|move|tag|status|collective|vehicle|team)[:\s]",
+                    stripped_lower,
+                ):
                     if in_description:
                         break
                     continue
 
-                # Check for spectrum alt format: "WORD NUMBER / WORD NUMBER"
-                if re.match(r"^([A-Z][A-Z\s]+?)\s+\d+\s*/\s*([A-Z][A-Z\s]+?)\s+\d+", line.strip()):
+                # Stop at ALL-CAPS spectrum line (e.g. "HURT OR SUBDUE 3 / GET INTO TROUBLE 4")
+                if self._is_spectrum_line(stripped):
                     if in_description:
                         break
                     continue
 
-                # Check for bullet point (start of moves section)
-                if line.lstrip().startswith(("•", "-")):
+                # Stop at bullet point (start of moves section)
+                if line.lstrip().startswith(("•", "-", "*", "¢")):
                     if in_description:
                         break
                     continue
 
-            # If we haven't started description yet, the first non-empty, non-header line starts it
-            if not in_description and line.strip():
+                # Stop at bold custom ability block
+                if stripped.startswith("**") and ":" in stripped:
+                    if in_description:
+                        break
+                    continue
+
+            # First non-empty, non-header line starts the description
+            if not in_description and stripped:
                 in_description = True
 
             if in_description:
                 description_lines.append(line)
 
-        # Remove leading empty lines from description
+        # Remove leading/trailing empty lines
         while description_lines and not description_lines[0].strip():
             description_lines.pop(0)
+        while description_lines and not description_lines[-1].strip():
+            description_lines.pop()
 
         return "\n".join(description_lines).strip()
 
@@ -260,101 +347,184 @@ class DangerParser:
             result = result.replace(letter, digit)
         return result
 
-    def _extract_spectrums(self, text: str) -> list[Spectrum]:
-        """Extract spectrums from text.
+    # --- Spectrum helpers ---------------------------------------------------
 
-        Handles both formats:
-        - Standard: "Name: current/max" (e.g., "Health: 2/4")
-        - Alternative: "NAME X / NAME Y" (e.g., "GET INTO TROUBLE 3 / HURT OR SUBDUE 2")
+    # Matches all-caps spectrum line: "HURT OR SUBDUE 3 / GET INTO TROUBLE 4"
+    _SPECTRUM_ALLCAPS_RE = re.compile(
+        r"^([A-Z][A-Z\s]+?)\s+([0-9]+|-)\s*(?:/\s*([A-Z][A-Z\s]+?)\s+([0-9]+|-))?$"
+    )
+    # Space-separated pairs WITHOUT slash: "CORRUPT 3 BRIBE -"
+    _SPECTRUM_SPACE_PAIRS_RE = re.compile(
+        r"^([A-Z][A-Z]+(?:\s+[A-Z]+)*)\s+([0-9]+|-)\s+([A-Z][A-Z]+(?:\s+[A-Z]+)*)\s+([0-9]+|-)$"
+    )
+    # Standard "Name: current/max" format
+    _SPECTRUM_SLASH_RE = re.compile(r"^([\w][\w\s]+?):\s*(\d+)\s*/\s*(\d+)$")
+
+    def _is_spectrum_line(self, line: str) -> bool:
+        """Return True if *line* looks like a spectrum declaration."""
+        s = line.strip()
+        if not s:
+            return False
+        # Explicit "Spectrum:" header
+        if re.match(r"(?:status\s+)?spectrum[:\s]", s, re.IGNORECASE):
+            return True
+        # "Name: current/max"
+        if self._SPECTRUM_SLASH_RE.match(s):
+            return True
+        # ALL-CAPS word(s) + digit or dash (with optional slash-separated second)
+        if self._SPECTRUM_ALLCAPS_RE.match(s):
+            return True
+        # Space-separated pairs: "CORRUPT 3 BRIBE -"
+        if self._SPECTRUM_SPACE_PAIRS_RE.match(s):
+            return True
+        return False
+
+    def _parse_spectrum_line(self, line: str) -> list[Spectrum]:
+        """Parse one line into 1–4 Spectrum objects.
+
+        Handles:
+        - "Name: current/max"  e.g. "Health: 2/4"
+        - "NAME N / NAME2 M"   e.g. "GET INTO TROUBLE 3 / HURT OR SUBDUE 4"
+        - "NAME N NAME2 M"     space-separated, no slash
+        - "NAME -"             dash means immune/unlimited (max_tier=None)
+        - Handles OCR digit confusion (S→5, O→0, etc.)
         """
-        spectrums = []
-        seen_spectrum_names = set()
+        s = line.strip()
+        results: list[Spectrum] = []
 
-        # Look for "Spectrum:" or "Status Spectrum:" sections
-        spectrum_section = re.search(
-            r"(?:status\s+)?spectrum[:\s]*(.+?)(?:move|threat|custom|hard|soft|\Z)",
-            text,
-            re.IGNORECASE | re.DOTALL,
-        )
-        if spectrum_section:
-            spectrum_text = spectrum_section.group(1)
-        else:
-            spectrum_text = text
+        # Strip a leading "Spectrum:" label
+        s = re.sub(r"^(?:status\s+)?spectrum[:\s]*", "", s, flags=re.IGNORECASE).strip()
 
-        # Try standard pattern first: "Name: current/max"
-        for match in re.finditer(self.SPECTRUM_PATTERN, spectrum_text):
-            name = match.group(1).strip()
-            current = int(match.group(2))
-            max_tier = int(match.group(3))
+        # "Name: current/max"
+        m = self._SPECTRUM_SLASH_RE.match(s)
+        if m:
+            name = m.group(1).strip()
+            max_tier = int(m.group(3))
+            current = int(m.group(2))
+            return [Spectrum(name=name, max_tier=max_tier, current_tier=current, pips=0)]
 
-            # Filter out false positives
-            if (
-                len(name) < 50
-                and name.lower()
-                not in {
-                    "description",
-                    "biology",
-                }
-                and name.lower() not in seen_spectrum_names
-            ):
-                spectrum = Spectrum(
+        # ALL-CAPS formats; parse tokens to find (name, value) pairs
+        parts = self._split_spectrum_tokens(s)
+        for name, raw_val in parts:
+            name = name.strip()
+            if not name or len(name) > 60:
+                continue
+            if raw_val == "-" or not raw_val:
+                max_tier = None
+            else:
+                corrected = self._correct_ocr_digit(raw_val)
+                try:
+                    max_tier = int(corrected)
+                except ValueError:
+                    max_tier = None
+            results.append(
+                Spectrum(
                     name=name,
                     max_tier=max_tier,
-                    current_tier=current,
+                    current_tier=max_tier if max_tier is not None else 0,
                     pips=0,
                 )
-                spectrums.append(spectrum)
-                seen_spectrum_names.add(name.lower())
+            )
+        return results
 
-        # Try alternative pattern: "GET INTO TROUBLE 3 / HURT OR SUBDUE 2"
-        # Matches with flexible digit patterns (handles OCR errors like S→5)
-        for match in re.finditer(self.SPECTRUM_ALT_PATTERN, spectrum_text):
-            name1 = match.group(1).strip()
-            value1_raw = match.group(2)
-            name2 = match.group(3).strip()
-            value2_raw = match.group(4)
+    def _split_spectrum_tokens(self, s: str) -> list[tuple[str, str]]:
+        """Split a spectrum line into (name, value) pairs.
 
-            # Try to add spectrum 1 if we have a name
-            if name1.lower() not in seen_spectrum_names and len(name1) < 50:
-                # Dash means immune/unlimited (None/null in JSON)
-                if value1_raw.strip() and value1_raw != "-":
-                    value1_str = self._correct_ocr_digit(value1_raw)
-                    try:
-                        current1 = int(value1_str)
-                    except ValueError:
-                        current1 = None
-                else:
-                    current1 = None
+        Handles slash-separated and space-separated ALL-CAPS formats.
+        E.g. "GET INTO TROUBLE 3 / HURT OR SUBDUE 4"
+             → [("GET INTO TROUBLE","3"),("HURT OR SUBDUE","4")]
+             "CORRUPT 3 BRIBE -" → [("CORRUPT","3"),("BRIBE","-")]
+        """
+        parts: list[tuple[str, str]] = []
+        # Split on slash first
+        segments = [seg.strip() for seg in s.split("/")]
+        for seg in segments:
+            seg = seg.strip()
+            if not seg:
+                continue
+            # Each segment: one or more ALL_CAPS words followed by a value token
+            # Value token: digits, OCR-digit chars, or "-"
+            m = re.match(r"^([A-Z][A-Z\s]+?)\s+([0-9SOIlZB]+|-)$", seg)
+            if m:
+                parts.append((m.group(1).strip(), m.group(2).strip()))
+            else:
+                # Try space-separated within the segment: grab consecutive pairs
+                tokens = seg.split()
+                i = 0
+                while i < len(tokens):
+                    # Collect all-caps name tokens
+                    name_tokens = []
+                    while i < len(tokens) and re.match(r"^[A-Z]+$", tokens[i]):
+                        name_tokens.append(tokens[i])
+                        i += 1
+                    # Next token should be the value
+                    if name_tokens and i < len(tokens):
+                        val = tokens[i]
+                        if re.match(r"^[0-9SOIlZB]+$", val) or val == "-":
+                            parts.append((" ".join(name_tokens), val))
+                            i += 1
+                    else:
+                        i += 1
+        return parts
 
-                spectrum1 = Spectrum(
-                    name=name1,
-                    max_tier=current1,
-                    current_tier=current1 if current1 is not None else 0,
-                    pips=0,
-                )
-                spectrums.append(spectrum1)
-                seen_spectrum_names.add(name1.lower())
+    def _extract_spectrums(self, text: str) -> list[Spectrum]:
+        """Extract spectrums by scanning each line of the text.
 
-            # Try to add spectrum 2 if we have a name
-            if name2.lower() not in seen_spectrum_names and len(name2) < 50:
-                # Dash means immune/unlimited (None/null in JSON)
-                if value2_raw.strip() and value2_raw != "-":
-                    value2_str = self._correct_ocr_digit(value2_raw)
-                    try:
-                        current2 = int(value2_str)
-                    except ValueError:
-                        current2 = None
-                else:
-                    current2 = None
+        Uses _is_spectrum_line / _parse_spectrum_line for all formats:
+        - "Name: current/max"
+        - "NAME N / NAME M"  (slash-separated ALL-CAPS)
+        - "NAME N NAME M"    (space-separated ALL-CAPS, common in printed books)
+        - "NAME -"           (dash = immune/unlimited)
+        Also handles an explicit "Spectrum:" section header.
+        """
+        spectrums: list[Spectrum] = []
+        seen: set[str] = set()
 
-                spectrum2 = Spectrum(
-                    name=name2,
-                    max_tier=current2,
-                    current_tier=current2 if current2 is not None else 0,
-                    pips=0,
-                )
-                spectrums.append(spectrum2)
-                seen_spectrum_names.add(name2.lower())
+        # First, check for an explicit "Spectrum:" section and prefer those lines
+        in_spectrum_section = False
+
+        for line in text.split("\n"):
+            stripped = line.strip()
+
+            # An explicit "Spectrum:" header opens the section
+            if re.match(r"^(?:status\s+)?spectrum[:\s]", stripped, re.IGNORECASE):
+                in_spectrum_section = True
+                # The header itself may contain data: "Spectrum: Health 2/4"
+                remainder = re.sub(
+                    r"^(?:status\s+)?spectrum[:\s]*", "", stripped, flags=re.IGNORECASE
+                ).strip()
+                if remainder:
+                    for sp in self._parse_spectrum_line(remainder):
+                        if sp.name.lower() not in seen:
+                            spectrums.append(sp)
+                            seen.add(sp.name.lower())
+                continue
+
+            # Close spectrum section when we hit bullets or known section starters
+            if in_spectrum_section:
+                if not stripped:
+                    continue
+                if stripped[0] in "•-*¢" or re.match(
+                    r"^(mythos|logos|move|tag|status|hard|soft|custom|collective|vehicle|team)[:\s]",
+                    stripped,
+                    re.IGNORECASE,
+                ):
+                    in_spectrum_section = False
+                    continue
+                # Parse this line as a spectrum
+                parsed = self._parse_spectrum_line(stripped)
+                for sp in parsed:
+                    if sp.name.lower() not in seen:
+                        spectrums.append(sp)
+                        seen.add(sp.name.lower())
+                continue
+
+            # Outside an explicit section: scan any line that looks like a spectrum
+            if self._is_spectrum_line(stripped):
+                for sp in self._parse_spectrum_line(stripped):
+                    if sp.name.lower() not in seen:
+                        spectrums.append(sp)
+                        seen.add(sp.name.lower())
 
         return spectrums
 
@@ -454,6 +624,63 @@ class DangerParser:
 
         return moves
 
+    def _extract_inline_move_metadata(self, desc: str) -> tuple[list[str], list[str], bool, str]:
+        """Extract inline statuses, story tags, optional flag, and effect type from a description.
+
+        Inline formats per the schema:
+        - (word-word-N)  → status tag (ends in -digit)
+        - (word)         → story tag (no trailing digit, 2–30 chars)
+        - (optional)     → sets optional=True (consumed, not a tag)
+        - "create a new Danger" / "Deny Them Something" → effect_type="createDanger"/"special"
+
+        Returns:
+            (statuses, story_tags, is_optional, effect_type)
+        """
+        statuses: list[str] = []
+        story_tags: list[str] = []
+        is_optional = False
+        effect_type = ""
+
+        # Check for "(optional)" flag
+        if re.search(r"\(optional\)", desc, re.IGNORECASE):
+            is_optional = True
+
+        # Check for special effect markers
+        if re.search(r"create\s+a\s+new\s+danger", desc, re.IGNORECASE):
+            effect_type = "createDanger"
+        elif re.search(r"deny\s+them\s+something\s+they\s+want", desc, re.IGNORECASE):
+            effect_type = "special"
+
+        # Extract (status-N) patterns
+        for m in self.STATUS_IN_PARENS_RE.finditer(desc):
+            tag = m.group(1)
+            if tag.lower() not in {"optional", "hard move", "soft move"}:
+                statuses.append(tag)
+
+        # Extract (story tag) patterns — exclude known false positives
+        _excluded = {
+            "optional",
+            "hard move",
+            "soft move",
+            "hard",
+            "soft",
+        }
+        for m in self.STORY_TAG_IN_PARENS_RE.finditer(desc):
+            tag = m.group(1).strip()
+            tag_lower = tag.lower()
+            # Skip if it's already captured as a status
+            if any(tag_lower == s.lower() for s in statuses):
+                continue
+            # Skip (optional) and move type markers
+            if tag_lower in _excluded:
+                continue
+            # Skip if it ends with a digit (already caught as status above)
+            if re.search(r"-\d+$", tag):
+                continue
+            story_tags.append(tag)
+
+        return statuses, story_tags, is_optional, effect_type
+
     def _extract_custom_moves(self, text: str) -> tuple[list[GMMove], list[CustomAbility]]:
         """Extract custom moves and abilities from bullet points with multi-line descriptions.
 
@@ -462,12 +689,29 @@ class DangerParser:
         - Custom Abilities: **Name:** blocks (special rules)
         Continues reading lines after move name to capture full descriptions.
 
+        Also extracts inline move metadata per schema rules:
+        - (status-N) parentheticals → GMMove.statuses list
+        - (story tag) parentheticals → GMMove.tags list
+        - (optional) → GMMove.optional = True
+        - "create a new Danger" → GMMove.effect_type = "createDanger"
+
         Returns:
             Tuple of (gm_moves, custom_abilities)
         """
         moves = []
         custom_abilities = []
         seen_names = set()
+
+        _MOVE_START_KWS = (
+            "when ",
+            "if ",
+            "get ",
+            "slam ",
+            "accelerate",
+            "takes ",
+            "rolls ",
+            "spends",
+        )
 
         # Look for all potential move lines
         lines = text.split("\n")
@@ -479,9 +723,17 @@ class DangerParser:
             if not line:
                 continue
 
+            # Skip spectrum lines — they are not moves
+            if self._is_spectrum_line(line):
+                continue
+
             # Skip section headers and other non-moves
             if line.endswith(":") or line.isupper():
                 continue
+
+            # Strip common OCR section prefixes (like "ACT ", "HARD ", "SOFT ")
+            # These appear before move names in OCR text
+            line = self._strip_section_prefix(line)
 
             # Check if line is a potential move by looking for:
             # 1. Custom abilities: **NAME:** blocks
@@ -501,24 +753,15 @@ class DangerParser:
             elif "(hard move)" in line.lower() or "(soft move)" in line.lower():
                 text_content = line
                 is_potential_move = True
-            elif any(
-                line.lower().startswith(keyword)
-                for keyword in (
-                    "when ",
-                    "if ",
-                    "get ",
-                    "slam ",
-                    "accelerate",
-                    "takes ",
-                    "rolls ",
-                    "spends",
-                )
-            ):
+            elif any(line.lower().startswith(keyword) for keyword in _MOVE_START_KWS):
                 text_content = line
                 is_potential_move = True
 
             if not is_potential_move or not text_content:
                 continue
+
+            # Strip common OCR section prefixes again after bullet removal
+            text_content = self._strip_section_prefix(text_content)
 
             # Skip if we've already added this
             if text_content.lower() in seen_names:
@@ -559,79 +802,48 @@ class DangerParser:
                 description_lines = [desc] if desc else []
                 while i < len(lines):
                     next_line = lines[i].strip()
-                    # Stop if we hit another bullet/move
                     if not next_line:
                         i += 1
                         continue
                     # Check if this is a new move (bullet point or keyword at start)
                     if next_line[0] in "•-*¢" or any(
-                        next_line.lower().startswith(kw)
-                        for kw in (
-                            "when ",
-                            "if ",
-                            "get ",
-                            "slam ",
-                            "accelerate",
-                            "takes ",
-                            "rolls ",
-                            "spends",
-                        )
+                        next_line.lower().startswith(kw) for kw in _MOVE_START_KWS
                     ):
                         break
 
-                    # Check if previous line ended with incomplete parenthesis
-                    # (e.g., "word (horri-") - continue to get the rest
+                    # If previous line had unclosed parens, always continue
                     if description_lines:
                         last_line = description_lines[-1]
                         open_parens = last_line.count("(") - last_line.count(")")
-                        # If we have unclosed parens, always continue regardless of line ending
                         if open_parens > 0:
-                            # Continue collecting even if it looks odd
-                            pass
+                            pass  # fall through to append
 
-                    # Add this line to description
                     description_lines.append(next_line)
                     i += 1
 
-                    # Stop after collecting reasonable amount (10 lines should be plenty)
                     if len(description_lines) >= 10:
                         break
 
                 desc = " ".join(description_lines).strip()
             else:
                 # For simple moves without colons, collect multi-line as well
-                # Extract just the main part (before parenthetical notes) for the name
                 desc_lines = [text_content]
                 if "(" in name:
                     name = name.split("(")[0].strip()
 
-                # Try to collect continuation lines (for OCR text where descriptions wrap)
                 while i < len(lines):
                     next_line = lines[i].strip()
                     if not next_line:
                         i += 1
                         continue
-                    # Stop if we hit a new move
                     if next_line[0] in "•-*¢" or any(
-                        next_line.lower().startswith(kw)
-                        for kw in (
-                            "when ",
-                            "if ",
-                            "get ",
-                            "slam ",
-                            "accelerate",
-                            "takes ",
-                            "rolls ",
-                            "spends",
-                        )
+                        next_line.lower().startswith(kw) for kw in _MOVE_START_KWS
                     ):
                         break
 
-                    # Check for unclosed parens from previous line
                     if desc_lines:
                         last_line = desc_lines[-1]
                         open_parens = last_line.count("(") - last_line.count(")")
-                        # If parens are unclosed, continue collecting
                         if open_parens > 0:
                             desc_lines.append(next_line)
                             i += 1
@@ -639,7 +851,6 @@ class DangerParser:
                                 break
                             continue
 
-                    # Otherwise stop (this line doesn't belong to us)
                     break
 
                 desc = " ".join(desc_lines).strip()
@@ -647,6 +858,11 @@ class DangerParser:
             if name and name.strip():
                 # Clean up bold markers (** or __) from name
                 cleaned_name = name.strip().replace("**", "").replace("__", "").strip()
+
+                # Extract inline metadata from description
+                inline_statuses, inline_tags, is_optional, effect_type = (
+                    self._extract_inline_move_metadata(desc)
+                )
 
                 # Separate custom abilities from GM moves
                 if move_type == MoveType.CUSTOM and text_content.startswith("**"):
@@ -668,6 +884,10 @@ class DangerParser:
                             name=cleaned_name,
                             description=(desc.strip() if desc.strip() else cleaned_name),
                             move_type=move_type,
+                            statuses=inline_statuses,
+                            tags=inline_tags,
+                            optional=is_optional,
+                            effect_type=effect_type,
                         )
                     )
                 seen_names.add(text_content.lower())

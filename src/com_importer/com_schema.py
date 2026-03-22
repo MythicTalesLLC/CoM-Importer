@@ -82,22 +82,29 @@ class GMMove:
     statuses: list[str] = field(default_factory=list)
     hide_name: bool = False
     header: str = "default"  # "default" | "none" | "symbols" | "text"
+    optional: bool = False  # Move is marked (optional) in rulebook
+    effect_type: str = ""  # "createDanger", "special", or ""
 
     def to_foundry_item(self) -> dict[str, Any]:
         """Convert to Foundry item JSON format."""
+        system: dict[str, Any] = {
+            "description": self.description,
+            "subtype": self.move_type.value,
+            "taglist": self.tags,
+            "statuslist": self.statuses,
+            "hideName": self.hide_name,
+            "header": self.header,
+            "locked": False,
+            "version": "3.0.0",
+        }
+        if self.optional:
+            system["optional"] = True
+        if self.effect_type:
+            system["effectType"] = self.effect_type
         return {
             "name": self.name,
             "type": "gmmove",
-            "system": {
-                "description": self.description,
-                "subtype": self.move_type.value,
-                "taglist": self.tags,
-                "statuslist": self.statuses,
-                "hideName": self.hide_name,
-                "header": self.header,
-                "locked": False,
-                "version": "3.0.0",
-            },
+            "system": system,
         }
 
 
@@ -230,8 +237,10 @@ class DangerActor:
     locked: bool = False
     is_template: bool = False
     collective_size: int = 0
+    collective_note: str = ""  # Collective/Vehicle/Team descriptor from rulebook
     finalized: bool = False
     danger_rating: str | None = None
+    is_mythos_power_set: bool = False  # Additive +★ rating, no spectrum line
     gm_moves: list[GMMove] = field(default_factory=list)
     custom_abilities: list[CustomAbility] = field(default_factory=list)
     spectrums: list[Spectrum] = field(default_factory=list)
@@ -282,6 +291,7 @@ class DangerActor:
                 "locked": self.locked,
                 "is_template": self.is_template,
                 "collective_size": self.collective_size,
+                "collective_note": self.collective_note,
                 "finalized": self.finalized,
                 "customAbilities": [ability.to_dict() for ability in self.custom_abilities],
                 "crewThemes": [],
@@ -421,8 +431,10 @@ def schema_from_dict(data: dict[str, Any]) -> DangerActor:
         locked=data.get("locked", False),
         is_template=data.get("is_template", False),
         collective_size=data.get("collective_size", 0),
+        collective_note=data.get("collective_note", ""),
         finalized=data.get("finalized", False),
         danger_rating=data.get("danger_rating"),
+        is_mythos_power_set=data.get("is_mythos_power_set", False),
         gm_moves=gm_moves,
         spectrums=spectrums,
         tags=tags,
