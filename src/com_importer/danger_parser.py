@@ -374,6 +374,11 @@ class DangerParser:
     # OCR-merged digit: "CATCHS / HURT OR SUBDUE 2" where "CATCHS" = "CATCH" + OCR("5")
     # First part: all-caps with trailing OCR-digit char; second: ALL-CAPS + digit
     _SPECTRUM_OCR_MERGED_RE = re.compile(r"^[A-Z]{2,}[SOIlZB0-9]\s*/\s*[A-Z][A-Z\s]+\s+[0-9]+$")
+    # Title-case or mixed-case spectrum: "Fool 3 / Scare 4" (PDF extraction common)
+    # Requires slash to avoid matching ordinary "Name N" sentences.
+    _SPECTRUM_TITLECASE_RE = re.compile(
+        r"^([A-Z][A-Za-z\s]{1,25}?)\s+([0-9]+|-)\s*/\s*([A-Z][A-Za-z\s]{1,25}?)\s+([0-9]+|-)$"
+    )
 
     def _is_spectrum_line(self, line: str) -> bool:
         """Return True if *line* looks like a spectrum declaration."""
@@ -394,6 +399,9 @@ class DangerParser:
             return True
         # OCR-merged digit: "CATCHS / HURT OR SUBDUE 2" (Tesseract merges "5" → "S" into word)
         if self._SPECTRUM_OCR_MERGED_RE.match(s):
+            return True
+        # Title-case slash format: "Fool 3 / Scare 4"
+        if self._SPECTRUM_TITLECASE_RE.match(s):
             return True
         return False
 
@@ -420,6 +428,24 @@ class DangerParser:
             max_tier = int(m.group(3))
             current = int(m.group(2))
             return [Spectrum(name=name, max_tier=max_tier, current_tier=current, pips=0)]
+
+        # Title-case slash format: "Fool 3 / Scare 4" — handle before ALL-CAPS tokenizer
+        m = self._SPECTRUM_TITLECASE_RE.match(s)
+        if m:
+            pairs = [(m.group(1).strip(), m.group(2)), (m.group(3).strip(), m.group(4))]
+            for name, raw_val in pairs:
+                if not name:
+                    continue
+                max_tier = None if raw_val == "-" else int(raw_val)
+                results.append(
+                    Spectrum(
+                        name=name,
+                        max_tier=max_tier,
+                        current_tier=max_tier if max_tier is not None else 0,
+                        pips=0,
+                    )
+                )
+            return results
 
         # ALL-CAPS formats; parse tokens to find (name, value) pairs
         parts = self._split_spectrum_tokens(s)
@@ -951,6 +977,17 @@ class DangerParser:
                 inline_statuses, inline_tags, is_optional, effect_type = (
                     self._extract_inline_move_metadata(desc)
                 )
+
+                # Detect "as a hard/soft move" anywhere in description (even without parens)
+                desc_lower = desc.lower()
+                if move_type != MoveType.HARD and re.search(
+                    r"\bas\s+a\s+hard\s+move\b", desc_lower
+                ):
+                    move_type = MoveType.HARD
+                elif move_type not in (MoveType.HARD, MoveType.SOFT) and re.search(
+                    r"\bas\s+a\s+soft\s+move\b", desc_lower
+                ):
+                    move_type = MoveType.SOFT
 
                 # If a SOFT move gives a status/tag, promote it to HARD
                 if move_type == MoveType.SOFT and inline_statuses:

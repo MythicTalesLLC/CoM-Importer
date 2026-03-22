@@ -31,6 +31,9 @@ def normalize_danger_text(text: str) -> str:
     # Fix common OCR issues
     text = _fix_ocr_artifacts(text)
 
+    # Normalize OCR bullet artifacts (e.g. Tesseract renders • as 'e' or 'o')
+    text = _normalize_ocr_bullets(text)
+
     # Normalize line breaks (remove soft breaks within paragraphs)
     text = _normalize_line_breaks(text)
 
@@ -70,6 +73,24 @@ def _fix_ocr_artifacts(text: str) -> str:
     return text
 
 
+def _normalize_ocr_bullets(text: str) -> str:
+    """Normalize OCR-garbled bullet characters to proper bullet points.
+
+    Tesseract commonly renders '•' as a standalone lowercase 'e' or 'o'.
+    Detect when 3+ lines start with this pattern (isolated letter + space)
+    and replace them with the canonical bullet '•'.
+
+    The detection pattern '^e/o followed by whitespace then non-whitespace'
+    is safe: it only fires when the character is truly a standalone symbol
+    (not the first letter of a word like "even" or "only").
+    """
+    for ocr_char in ("e", "o"):
+        count = sum(1 for line in text.split("\n") if re.match(rf"^{ocr_char}\s+\S", line))
+        if count >= 3:
+            text = re.sub(rf"^{ocr_char}(\s+)", r"•\1", text, flags=re.MULTILINE)
+    return text
+
+
 def _normalize_line_breaks(text: str) -> str:
     """
     Normalize line breaks.
@@ -100,8 +121,12 @@ def _normalize_line_breaks(text: str) -> str:
                     result_lines.append(current)
                 current = stripped
             elif current and current[0] in "•-*¢":
-                # Soft-wrapped continuation of the current bullet item
-                current = current + " " + stripped
+                # Soft-wrapped continuation of the current bullet item.
+                # Strip a soft-hyphen at the end of the current fragment before joining.
+                if current.endswith("-") and not current.endswith("--"):
+                    current = current[:-1] + stripped
+                else:
+                    current = current + " " + stripped
             else:
                 # Non-bullet standalone line (field label, prose, header) — keep separate
                 if current:

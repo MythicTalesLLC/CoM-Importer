@@ -224,5 +224,83 @@ class TestEndToEndPipeline:
         assert len(json_str) > 0
 
 
+class TestReporterCard:
+    """Regression tests for Reporter card parsing — both clean and OCR input."""
+
+    CLEAN_TEXT = """REPORTER ★★
+Television, radio, and newspaper reporters are always looking for the next scoop.
+FOOL 3 / SCARE 4
+• Inquisitive: As a hard move, the MC will ask you one question.
+• On the Ball: When the Reporter enters the scene, give her alert-1.
+• Expose someone publically or give them a bad reputation
+  (exposed-2 or infamous-2) or threaten to do so unless...
+• Use a press pass
+• Show up at the worst time, snooping around
+• Find an unlikely witness and start interviewing them
+• Shove a microphone in someone's face and tell them they're live"""
+
+    OCR_TEXT = """REPORTER * *
+Television, radio, and newspaper reporters are
+always looking for the next scoop. You can often
+find them snooping around where unusual events.
+FOOL 3 / SCARE 4
+e Inquisitive: As a hard move, the MC will
+ask you one question. You must reply with a
+straight answer or a solid lead.
+e On the Ball: When the Reporter enters the
+scene, give her alert-1.
+e Expose someone publically or give them a
+bad reputation or threaten to do so unless...
+e Use a press pass
+e Show up at the worst time, snooping around
+e Find an unlikely witness and start interview-
+ing them
+e Shove a microphone in someone's face"""
+
+    def test_spectrum_parsed_from_clean_text(self):
+        parser = DangerParser()
+        actor, _ = parser.parse(self.CLEAN_TEXT)
+        names = {s.name for s in actor.spectrums}
+        assert names == {"FOOL", "SCARE"}
+        tiers = {s.name: s.max_tier for s in actor.spectrums}
+        assert tiers["FOOL"] == 3
+        assert tiers["SCARE"] == 4
+
+    def test_spectrum_titlecase(self):
+        """Title-case spectrum names from PDF extraction should be detected."""
+        parser = DangerParser()
+        text = """Reporter ★★\nA reporter.\nFool 3 / Scare 4\n• Do something.\n"""
+        actor, _ = parser.parse(text)
+        names = {s.name for s in actor.spectrums}
+        assert names == {"Fool", "Scare"}
+
+    def test_ocr_bullets_produce_moves(self):
+        """Tesseract 'e' bullet artifacts should be normalized to proper bullets."""
+        parser = DangerParser()
+        actor, _ = parser.parse(self.OCR_TEXT)
+        assert len(actor.gm_moves) >= 5, f"Expected >=5 moves, got {len(actor.gm_moves)}"
+
+    def test_inquisitive_is_hard_move(self):
+        """'As a hard move' in description should classify as HARD."""
+        parser = DangerParser()
+        actor, _ = parser.parse(self.CLEAN_TEXT)
+        inquisitive = next((m for m in actor.gm_moves if "Inquisitive" in m.name), None)
+        assert inquisitive is not None
+        assert inquisitive.move_type == MoveType.HARD
+
+    def test_hyphen_wrapped_line_merged(self):
+        """Soft-hyphenated line wraps should be joined without the hyphen."""
+        parser = DangerParser()
+        actor, _ = parser.parse(self.OCR_TEXT)
+        names = [m.name for m in actor.gm_moves]
+        # "interview-\ning" should be merged to "interviewing"
+        assert any("interviewing" in n.lower() for n in names), f"names: {names}"
+
+    def test_danger_rating(self):
+        parser = DangerParser()
+        actor, _ = parser.parse(self.CLEAN_TEXT)
+        assert actor.danger_rating == "2"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
