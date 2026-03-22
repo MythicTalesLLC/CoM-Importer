@@ -93,16 +93,19 @@ class EditActorDialog(QDialog):
         layout.addWidget(QLabel("Description:"))
         self.description_input = QPlainTextEdit(self.actor.description)
         self.description_input.setMaximumHeight(150)
+        self._bump_font(self.description_input)
         layout.addWidget(self.description_input)
 
         layout.addWidget(QLabel("Biography (optional):"))
         self.biography_input = QPlainTextEdit(self.actor.biography)
         self.biography_input.setMaximumHeight(100)
+        self._bump_font(self.biography_input)
         layout.addWidget(self.biography_input)
 
         layout.addWidget(QLabel("GM Notes (optional):"))
         self.gmnotes_input = QPlainTextEdit(self.actor.gmnotes)
         self.gmnotes_input.setMaximumHeight(100)
+        self._bump_font(self.gmnotes_input)
         layout.addWidget(self.gmnotes_input)
 
         layout.addStretch()
@@ -462,6 +465,14 @@ class EditActorDialog(QDialog):
             font = QFont("Courier New")
         font.setPointSize(10)
         return font
+
+    @staticmethod
+    def _bump_font(widget, delta: int = 2) -> None:
+        """Increase widget font size by delta points above the current default."""
+        font = widget.font()
+        size = font.pointSize()
+        font.setPointSize((size if size > 0 else 13) + delta)
+        widget.setFont(font)
 
 
 class ExportResultDialog(QDialog):
