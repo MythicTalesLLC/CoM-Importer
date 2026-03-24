@@ -5,6 +5,8 @@ PDF handling utilities for extracting pages and converting to images.
 from __future__ import annotations
 
 import logging
+import os
+import shutil
 from pathlib import Path
 
 from pdf2image import convert_from_path
@@ -15,6 +17,38 @@ logger = logging.getLogger(__name__)
 
 class PDFHandler:
     """Handles PDF extraction and image conversion."""
+
+    # Common poppler binary locations on macOS and Linux.
+    _POPPLER_SEARCH_PATHS = [
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        "/opt/local/bin",
+        "/usr/bin",
+    ]
+
+    @staticmethod
+    def _find_poppler_path() -> str | None:
+        """Return the directory containing pdftoppm, or None if not found.
+
+        Checks an explicit env-var override first, then PATH, then common
+        install locations so that packaged (Finder-launched) apps — which
+        inherit a restricted PATH — can still find Homebrew-installed poppler.
+        """
+        for env_var in ("COM_IMPORTER_POPPLER_PATH", "POPPLER_PATH"):
+            candidate = os.environ.get(env_var)
+            if candidate and Path(candidate, "pdftoppm").is_file():
+                return candidate
+
+        # shutil.which searches the current PATH
+        which_path = shutil.which("pdftoppm")
+        if which_path:
+            return str(Path(which_path).parent)
+
+        for directory in PDFHandler._POPPLER_SEARCH_PATHS:
+            if Path(directory, "pdftoppm").is_file():
+                return directory
+
+        return None
 
     @staticmethod
     def get_page_count(pdf_path: str | Path) -> int:
@@ -34,14 +68,28 @@ class PDFHandler:
         if not pdf_path.exists():
             raise FileNotFoundError(f"PDF file not found: {pdf_path}")
 
+        poppler_path = PDFHandler._find_poppler_path()
+
         try:
-            images = convert_from_path(pdf_path, first_page=1, last_page=1)
-            # Get total pages (try to convert all to count)
-            images = convert_from_path(pdf_path)
+            images = convert_from_path(
+                pdf_path, first_page=1, last_page=1, poppler_path=poppler_path
+            )
+            images = convert_from_path(pdf_path, poppler_path=poppler_path)
             return len(images)
         except Exception as e:
             logger.error(f"Failed to read PDF: {e}")
-            raise RuntimeError(f"Cannot read PDF file: {str(e)}") from e
+            msg = str(e)
+            if (
+                "poppler" in msg.lower()
+                or "pdftoppm" in msg.lower()
+                or "Unable to get page count" in msg
+            ):
+                raise RuntimeError(
+                    f"Cannot read PDF file: {msg}\n\n"
+                    "Poppler is required for PDF support. Install it with:\n"
+                    "  brew install poppler"
+                ) from e
+            raise RuntimeError(f"Cannot read PDF file: {msg}") from e
 
     @staticmethod
     def extract_page_as_image(
@@ -67,6 +115,8 @@ class PDFHandler:
         if not pdf_path.exists():
             raise FileNotFoundError(f"PDF file not found: {pdf_path}")
 
+        poppler_path = PDFHandler._find_poppler_path()
+
         try:
             # Convert page to image
             images = convert_from_path(
@@ -74,6 +124,7 @@ class PDFHandler:
                 first_page=page_number,
                 last_page=page_number,
                 dpi=dpi,
+                poppler_path=poppler_path,
             )
 
             if not images:

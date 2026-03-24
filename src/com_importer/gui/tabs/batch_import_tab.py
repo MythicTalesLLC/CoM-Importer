@@ -7,7 +7,8 @@ from pathlib import Path
 
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtWidgets import (
-    QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -37,20 +38,17 @@ class BatchImportWorker(QThread):
         self,
         batch_manager: BatchImportManager,
         texts: list[str],
-        actor_type: str = "threat",
     ):
         """Initialize worker."""
         super().__init__()
         self.batch_manager = batch_manager
         self.texts = texts
-        self.actor_type = actor_type
 
     def run(self):
         """Run batch import."""
         try:
             report = self.batch_manager.import_from_texts(
                 self.texts,
-                actor_type=self.actor_type,
                 progress_callback=lambda curr, total: self.progress.emit(curr, total),
             )
             self.finished.emit(report)
@@ -60,30 +58,23 @@ class BatchImportWorker(QThread):
 
 
 class BatchImportTab(QWidget):
-    """Tab for batch importing multiple actors."""
+    """Tab for batch importing multiple threats."""
 
     def __init__(self):
         """Initialize the batch import tab."""
         super().__init__()
         self.foundry_client = None
+        self.history_callback = None
         self.current_texts: list[str] = []
         self.current_report = None
-        self.actor_type = "threat"  # Default to danger
         self._create_ui()
+
+    def _actor_label(self, plural: bool = False) -> str:
+        return "Dangers" if plural else "Danger"
 
     def _create_ui(self) -> None:
         """Create the user interface."""
         layout = QVBoxLayout(self)
-
-        # Actor type selector
-        type_layout = QHBoxLayout()
-        type_layout.addWidget(QLabel("Import Type:"))
-        self.actor_type_combo = QComboBox()
-        self.actor_type_combo.addItems(["Danger (Threat)", "Character (Player)"])
-        self.actor_type_combo.currentIndexChanged.connect(self._on_actor_type_changed)
-        type_layout.addWidget(self.actor_type_combo)
-        type_layout.addStretch()
-        layout.addLayout(type_layout)
 
         # Input selection
         layout.addWidget(QLabel("Input Method:"))
@@ -105,7 +96,8 @@ class BatchImportTab(QWidget):
         layout.addWidget(self.input_label)
 
         # Preview
-        layout.addWidget(QLabel("Loaded Dangers Preview:"))
+        self.preview_label = QLabel("Loaded Dangers Preview:")
+        layout.addWidget(self.preview_label)
         self.preview_text = QPlainTextEdit()
         self.preview_text.setReadOnly(True)
         self.preview_text.setMaximumHeight(100)
@@ -153,12 +145,7 @@ class BatchImportTab(QWidget):
         layout.addLayout(button_layout)
 
     def _on_actor_type_changed(self) -> None:
-        """Handle actor type selection change."""
-        if self.actor_type_combo.currentIndex() == 0:
-            self.actor_type = "threat"
-        else:
-            self.actor_type = "character"
-        logger.debug(f"Actor type changed to: {self.actor_type}")
+        pass  # actor type selector removed; always threat
 
     def _select_file(self) -> None:
         """Select a file to import."""
@@ -181,7 +168,7 @@ class BatchImportTab(QWidget):
                 texts = BatchImportParser.parse_csv(str(file_path))
             else:
                 # Try to detect format
-                with open(file_path) as f:
+                with open(file_path, encoding="utf-8") as f:
                     content = f.read()
                     if content.strip().startswith("{"):
                         texts = BatchImportParser.parse_jsonl(str(file_path))
@@ -203,20 +190,27 @@ class BatchImportTab(QWidget):
 
     def _show_paste_dialog(self) -> None:
         """Show dialog to paste text blocks."""
-        dialog = QWidget()
-        dialog.setWindowTitle("Paste Danger Text")
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Paste {self._actor_label()} Text")
+        dialog.setModal(True)
         layout = QVBoxLayout(dialog)
 
-        layout.addWidget(QLabel("Paste danger text blocks (separated by ---):"))
+        layout.addWidget(
+            QLabel(
+                f"Paste {self._actor_label(plural=True).lower()} text blocks (separated by ---):"
+            )
+        )
         text_edit = QPlainTextEdit()
         text_edit.setPlaceholderText(
-            "Paste multiple dangers separated by\\n---\\n\\nExample:\\n"
-            "Danger 1 text...\\n---\\n Danger 2 text..."
+            "Paste multiple entries separated by\\n---\\n\\nExample:\\n"
+            "Entry 1 text...\\n---\\nEntry 2 text..."
         )
         layout.addWidget(text_edit)
 
-        button_layout = QHBoxLayout()
-        load_button = QPushButton("Load")
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Load")
 
         def load_pasted():
             content = text_edit.toPlainText()
@@ -226,26 +220,30 @@ class BatchImportTab(QWidget):
 
             texts = BatchImportParser.parse_text_blocks(content)
             if texts:
-                self._load_texts(texts, f"Pasted {len(texts)} danger blocks")
-                dialog.close()
+                self._load_texts(
+                    texts,
+                    f"Pasted {len(texts)} {self._actor_label(plural=True).lower()} blocks",
+                )
+                dialog.accept()
             else:
-                QMessageBox.warning(dialog, "No Input", "Could not parse any danger blocks.")
+                QMessageBox.warning(dialog, "No Input", "Could not parse any text blocks.")
 
-        load_button.clicked.connect(load_pasted)
-        button_layout.addWidget(load_button)
-        button_layout.addStretch()
-        layout.addLayout(button_layout)
+        buttons.accepted.connect(load_pasted)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
 
         dialog.resize(600, 400)
-        dialog.show()
+        dialog.exec()
 
     def _load_texts(self, texts: list[str], source: str) -> None:
-        """Load danger texts for import."""
+        """Load parsed input blocks for import."""
         self.current_texts = texts
         self.current_report = None
 
         # Update UI
-        self.input_label.setText(f"{source} - {len(texts)} danger(s) loaded")
+        self.input_label.setText(
+            f"{source} - {len(texts)} {self._actor_label(plural=True).lower()} loaded"
+        )
 
         # Show preview
         preview = "\n---\n".join(
@@ -258,12 +256,16 @@ class BatchImportTab(QWidget):
 
         # Enable import
         self.import_button.setEnabled(True)
-        self.status_label.setText(f"Ready to import {len(texts)} dangers")
+        self.status_label.setText(
+            f"Ready to import {len(texts)} {self._actor_label(plural=True).lower()}"
+        )
 
     def _import_all(self) -> None:
-        """Import all loaded dangers to Foundry."""
+        """Import all loaded actors to Foundry."""
         if not self.current_texts:
-            QMessageBox.warning(self, "No Input", "Load dangers first.")
+            QMessageBox.warning(
+                self, "No Input", f"Load {self._actor_label(plural=True).lower()} first."
+            )
             return
 
         if not self.foundry_client:
@@ -278,7 +280,7 @@ class BatchImportTab(QWidget):
         batch_manager = BatchImportManager(self.foundry_client)
 
         # Start import worker
-        self.worker = BatchImportWorker(batch_manager, self.current_texts, self.actor_type)
+        self.worker = BatchImportWorker(batch_manager, self.current_texts)
         self.worker.progress.connect(self._on_progress)
         self.worker.finished.connect(self._on_import_complete)
         self.worker.error.connect(self._on_import_error)
@@ -308,11 +310,30 @@ class BatchImportTab(QWidget):
 
         # Show summary
         self.status_label.setText(report.summary())
+        self._record_history(report)
         QMessageBox.information(
             self,
             "Batch Import Complete",
             report.summary(),
         )
+
+    def _record_history(self, report) -> None:
+        """Persist successful batch results in history if callback is configured."""
+        if not self.history_callback:
+            return
+
+        for result in report.results:
+            if result.status != "success" or not result.actor_json:
+                continue
+
+            self.history_callback(
+                actor_id=result.actor_id or "",
+                danger_name=result.name or "(unnamed)",
+                actor_json=result.actor_json,
+                danger_rating=result.actor_json.get("system", {}).get("danger", ""),
+                source="batch",
+                status="success",
+            )
 
     def _on_import_error(self, error: str) -> None:
         """Handle import error."""
@@ -353,6 +374,8 @@ class BatchImportTab(QWidget):
 
             # Error
             error = result.error_message or ""
+            if not error and result.export_path:
+                error = f"Exported fallback: {result.export_path}"
             self.results_table.setItem(idx, 4, QTableWidgetItem(error))
 
     def _export_failed(self) -> None:
@@ -390,7 +413,7 @@ class BatchImportTab(QWidget):
             QMessageBox.information(
                 self,
                 "Export Successful",
-                f"Exported {len(failed)} failed dangers to:\n{file_path}",
+                f"Exported {len(failed)} failed entries to:\n{file_path}",
             )
         except Exception as e:
             QMessageBox.critical(
@@ -414,3 +437,7 @@ class BatchImportTab(QWidget):
     def set_foundry_client(self, client) -> None:
         """Set the Foundry client."""
         self.foundry_client = client
+
+    def set_history_callback(self, callback) -> None:
+        """Set callback for persisting batch import history."""
+        self.history_callback = callback

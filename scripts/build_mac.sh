@@ -2,15 +2,72 @@
 # Build script for City of Mist Importer - macOS
 # Creates standalone CoM-Importer.app bundle for distribution
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$PROJECT_DIR/build"
 DIST_DIR="$PROJECT_DIR/dist"
+SPEC_FILE="$PROJECT_DIR/com_importer_mac.spec"
+PYTHON_BIN="${PYTHON_BIN:-}"
+
+require_cmd() {
+    local cmd="$1"
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        echo "ERROR: Required command not found: $cmd"
+        exit 1
+    fi
+}
+
+ensure_pyinstaller() {
+    if "$PYTHON_BIN" -m PyInstaller --version >/dev/null 2>&1; then
+        return
+    fi
+
+    echo "PyInstaller not found in current Python environment. Installing..."
+    "$PYTHON_BIN" -m pip install pyinstaller
+
+    if ! "$PYTHON_BIN" -m PyInstaller --version >/dev/null 2>&1; then
+        echo "ERROR: PyInstaller install failed in current environment."
+        echo "Try: $PYTHON_BIN -m pip install -e '.[build]'"
+        exit 1
+    fi
+}
 
 echo "🔨 Building CoM Importer for macOS..."
 echo "Project directory: $PROJECT_DIR"
+
+if [[ "$(uname -s)" != "Darwin" ]]; then
+    echo "⚠️  Non-macOS host detected. This script targets macOS bundles and may fail."
+fi
+
+if [[ -z "$PYTHON_BIN" ]]; then
+    if [[ -x "$PROJECT_DIR/.venv/bin/python" ]]; then
+        PYTHON_BIN="$PROJECT_DIR/.venv/bin/python"
+    elif [[ -n "${VIRTUAL_ENV:-}" ]] && [[ -x "$VIRTUAL_ENV/bin/python" ]]; then
+        PYTHON_BIN="$VIRTUAL_ENV/bin/python"
+    elif command -v python3 >/dev/null 2>&1; then
+        PYTHON_BIN="$(command -v python3)"
+    else
+        echo "ERROR: No usable Python interpreter found."
+        exit 1
+    fi
+fi
+
+if [[ ! -x "$PYTHON_BIN" ]]; then
+    echo "ERROR: PYTHON_BIN is not executable: $PYTHON_BIN"
+    exit 1
+fi
+
+require_cmd rm
+
+if [[ ! -f "$SPEC_FILE" ]]; then
+    echo "ERROR: Spec file not found: $SPEC_FILE"
+    exit 1
+fi
+
+ensure_pyinstaller
+echo "Using Python: $PYTHON_BIN"
 
 # Clean previous builds
 if [ -d "$BUILD_DIR" ]; then
@@ -23,14 +80,10 @@ if [ -d "$DIST_DIR" ]; then
     rm -rf "$DIST_DIR"
 fi
 
-# Install build dependencies if needed
-echo "Checking dependencies..."
-python3 -m pip install -q pyinstaller 2>/dev/null || true
-
 # Build using PyInstaller
 echo "Running PyInstaller..."
 cd "$PROJECT_DIR"
-python3 -m PyInstaller --clean -y com_importer_mac.spec
+"$PYTHON_BIN" -m PyInstaller --clean -y "$SPEC_FILE"
 
 # Verify build
 if [ -d "$DIST_DIR/CoM-Importer.app" ]; then
@@ -38,7 +91,7 @@ if [ -d "$DIST_DIR/CoM-Importer.app" ]; then
     echo "App location: $DIST_DIR/CoM-Importer.app"
 
     # Create DMG for distribution (optional)
-    if command -v create-dmg &> /dev/null; then
+    if command -v create-dmg >/dev/null 2>&1; then
         echo "Creating DMG installer..."
         create-dmg \
             --volname "CoM Importer" \
@@ -54,7 +107,8 @@ if [ -d "$DIST_DIR/CoM-Importer.app" ]; then
     fi
 
     # Code signing for distribution (optional)
-    if [ ! -z "$CODESIGN_IDENTITY" ]; then
+    if [[ -n "${CODESIGN_IDENTITY:-}" ]]; then
+        require_cmd codesign
         echo "Code signing with identity: $CODESIGN_IDENTITY"
         codesign --deep --force --verify --verbose \
             --sign "$CODESIGN_IDENTITY" \

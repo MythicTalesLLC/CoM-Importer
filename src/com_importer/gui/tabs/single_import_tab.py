@@ -7,7 +7,6 @@ from pathlib import Path
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QComboBox,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -20,8 +19,6 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from ...actor_detector import ActorTypeDetector
-from ...character_parser import CharacterParser
 from ...danger_parser import DangerParser, ParsingError
 
 logger = logging.getLogger(__name__)
@@ -157,38 +154,121 @@ class DragDropImageWidget(QWidget):
         return self.image_path
 
 
+class DragDropPDFWidget(QWidget):
+    """Widget for PDF input with drag-and-drop and browse-button support."""
+
+    def __init__(self, parent=None):
+        """Initialize the drag-drop PDF widget."""
+        super().__init__(parent)
+        self._file_callback = None
+        self._create_ui()
+        self.setAcceptDrops(True)
+
+    def _create_ui(self) -> None:
+        """Create the UI."""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        btn_row = QHBoxLayout()
+        self.select_btn = QPushButton("Select PDF…")
+        self.select_btn.clicked.connect(self._browse)
+        btn_row.addWidget(self.select_btn)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+
+        self.drop_zone = QLabel("📄 Drag a PDF here or click Select PDF…")
+        self.drop_zone.setStyleSheet(
+            "QLabel {"
+            "  border: 2px dashed #2196F3;"
+            "  border-radius: 8px;"
+            "  padding: 40px;"
+            "  text-align: center;"
+            "  background-color: #F5F5F5;"
+            "  color: #666;"
+            "  font-size: 14px;"
+            "}"
+        )
+        self.drop_zone.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.drop_zone, 1)
+
+        self.status_label = QLabel("")
+        layout.addWidget(self.status_label)
+
+    # ── drag handling ────────────────────────────────────────────────────────
+
+    def dragEnterEvent(self, event) -> None:
+        if event.mimeData().hasUrls():
+            urls = event.mimeData().urls()
+            if any(url.toLocalFile().lower().endswith(".pdf") for url in urls):
+                event.acceptProposedAction()
+                self.drop_zone.setStyleSheet(
+                    "QLabel {"
+                    "  border: 2px solid #2196F3;"
+                    "  border-radius: 8px;"
+                    "  padding: 40px;"
+                    "  background-color: #E3F2FD;"
+                    "  color: #1976D2;"
+                    "  font-size: 14px;"
+                    "  font-weight: bold;"
+                    "}"
+                )
+
+    def dragLeaveEvent(self, event) -> None:
+        self._reset_drop_style()
+
+    def dropEvent(self, event) -> None:
+        self._reset_drop_style()
+        urls = event.mimeData().urls()
+        for url in urls:
+            path = url.toLocalFile()
+            if path.lower().endswith(".pdf"):
+                self._emit_file(path)
+                break
+
+    def _reset_drop_style(self) -> None:
+        self.drop_zone.setStyleSheet(
+            "QLabel {"
+            "  border: 2px dashed #2196F3;"
+            "  border-radius: 8px;"
+            "  padding: 40px;"
+            "  text-align: center;"
+            "  background-color: #F5F5F5;"
+            "  color: #666;"
+            "  font-size: 14px;"
+            "}"
+        )
+
+    def _browse(self) -> None:
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Select PDF", "", "PDF Files (*.pdf);;All Files (*)"
+        )
+        if file_path:
+            self._emit_file(file_path)
+
+    def _emit_file(self, path: str) -> None:
+        self.status_label.setText(f"📄 {Path(path).name}")
+        if self._file_callback:
+            self._file_callback(path)
+
+    def set_file_callback(self, callback) -> None:
+        """Set the callback called with the PDF path when a file is selected."""
+        self._file_callback = callback
+
+
 logger = logging.getLogger(__name__)
 
 
 class SingleImportTab(QWidget):
-    """Tab for single danger/character input and creation."""
+    """Tab for single threat input and creation."""
 
     def __init__(self):
         """Initialize the single import tab."""
         super().__init__()
-        self.actor_type = "threat"  # Default to danger
         self._create_ui()
 
     def _create_ui(self) -> None:
         """Create the user interface."""
         layout = QVBoxLayout(self)
-
-        # Actor type selector
-        type_layout = QHBoxLayout()
-        type_layout.addWidget(QLabel("Import Type:"))
-        self.actor_type_combo = QComboBox()
-        self.actor_type_combo.addItems(["Danger (Threat)", "Character (Player)"])
-        self.actor_type_combo.currentIndexChanged.connect(self._on_actor_type_changed)
-        type_layout.addWidget(self.actor_type_combo)
-
-        # Auto-detect button
-        auto_detect_btn = QPushButton("Auto-Detect")
-        auto_detect_btn.setMaximumWidth(100)
-        auto_detect_btn.clicked.connect(self._auto_detect_actor_type)
-        type_layout.addWidget(auto_detect_btn)
-
-        type_layout.addStretch()
-        layout.addLayout(type_layout)
 
         # Input type selector
         input_selector = self._create_input_selector()
@@ -218,18 +298,13 @@ class SingleImportTab(QWidget):
 
         layout.addLayout(button_layout)
 
-        # "Create from scratch" buttons — separate row, visually distinct
+        # "Create from scratch" button
         create_layout = QHBoxLayout()
         create_layout.addWidget(QLabel("Create from scratch:"))
         new_danger_button = QPushButton("＋ New Danger / Threat / NPC")
         new_danger_button.setToolTip("Open a blank danger actor to build from scratch")
         new_danger_button.clicked.connect(self._new_danger)
         create_layout.addWidget(new_danger_button)
-
-        new_character_button = QPushButton("＋ New Character")
-        new_character_button.setToolTip("Open a blank character actor to build from scratch")
-        new_character_button.clicked.connect(self._new_character)
-        create_layout.addWidget(new_character_button)
         create_layout.addStretch()
         layout.addLayout(create_layout)
 
@@ -245,10 +320,10 @@ class SingleImportTab(QWidget):
         # Text input tab
         text_widget = QWidget()
         text_layout = QVBoxLayout(text_widget)
-        text_layout.addWidget(QLabel("Paste danger/character text or PDF content:"))
+        text_layout.addWidget(QLabel("Paste threat/danger text or PDF content:"))
         self.text_input = QPlainTextEdit()
         self.text_input.setPlaceholderText(
-            "Paste danger description here...\n\nExample:\nDanger Rating: 3\nName\nDescription..."
+            "Paste threat description here...\n\nExample:\nDanger Rating: 3\nName\nDescription..."
         )
         text_layout.addWidget(self.text_input)
         tabs.addTab(text_widget, "Text")
@@ -264,48 +339,18 @@ class SingleImportTab(QWidget):
         pdf_widget = QWidget()
         pdf_layout = QVBoxLayout(pdf_widget)
         pdf_layout.addWidget(QLabel("Extract from PDF:"))
-        pdf_button_layout = QHBoxLayout()
-        select_pdf_btn = QPushButton("Select PDF...")
-        select_pdf_btn.clicked.connect(self._select_pdf)
-        pdf_button_layout.addWidget(select_pdf_btn)
-        self.pdf_label = QLabel("No PDF selected")
-        pdf_button_layout.addWidget(self.pdf_label)
-        pdf_layout.addLayout(pdf_button_layout)
-        pdf_layout.addStretch()
+        self.pdf_drop_widget = DragDropPDFWidget()
+        self.pdf_drop_widget.set_file_callback(self._on_pdf_dropped)
+        pdf_layout.addWidget(self.pdf_drop_widget)
         tabs.addTab(pdf_widget, "PDF")
 
         return tabs
 
     def _on_actor_type_changed(self) -> None:
-        """Handle actor type selection change."""
-        if self.actor_type_combo.currentIndex() == 0:
-            self.actor_type = "threat"
-        else:
-            self.actor_type = "character"
-        logger.debug(f"Actor type changed to: {self.actor_type}")
+        pass  # type selector removed; always threat
 
     def _auto_detect_actor_type(self) -> None:
-        """Auto-detect actor type based on pasted text and update dropdown."""
-        text = self.text_input.toPlainText()
-        if not text.strip():
-            return
-
-        detected_type = ActorTypeDetector.detect(text)
-        confidence = ActorTypeDetector.confidence(text)
-
-        # Update dropdown to match detected type
-        if detected_type == "danger":
-            self.actor_type_combo.setCurrentIndex(0)
-        else:
-            self.actor_type_combo.setCurrentIndex(1)
-
-        # Log detection with confidence
-        threat_conf = confidence["danger"]
-        char_conf = confidence["character"]
-        logger.debug(
-            f"Auto-detected: {detected_type} "
-            f"(danger: {threat_conf:.0%}, character: {char_conf:.0%})"
-        )
+        pass  # actor detection removed; always threat
 
     def _set_parse_status(self, msg: str, style: str = "ok") -> None:
         """Update the parse status label. style: 'ok' | 'warn' | 'error'."""
@@ -361,14 +406,20 @@ class SingleImportTab(QWidget):
             self._set_parse_status(f"❌ OCR failed: {e}", "error")
             logger.exception("Image OCR failed")
 
+    def _on_pdf_dropped(self, file_path: str) -> None:
+        """Called when a PDF is selected via drag-drop or the browse button."""
+        self._process_pdf_file(file_path)
+
     def _select_pdf(self) -> None:
-        """Select a PDF file."""
+        """Open a file-picker dialog and process the selected PDF."""
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Select PDF", "", "PDF Files (*.pdf);;All Files (*)"
         )
-        if not file_path:
-            return
+        if file_path:
+            self._process_pdf_file(file_path)
 
+    def _process_pdf_file(self, file_path: str) -> None:
+        """Extract OCR text from a PDF file and populate the text field."""
         try:
             from ...pdf_handler import PDFHandler
 
@@ -380,7 +431,6 @@ class SingleImportTab(QWidget):
             if not ok or page_num <= 0:
                 return
 
-            self.pdf_label.setText(f"Extracting page {page_num}...")
             self._set_parse_status(f"⏳ Extracting page {page_num} from PDF…", "warn")
 
             from PyQt6.QtWidgets import QApplication
@@ -415,11 +465,11 @@ class SingleImportTab(QWidget):
 
                 # Populate text field
                 self.text_input.setPlainText(text)
-                self.pdf_label.setText(f"✓ Extracted page {page_num} from PDF")
+                self.pdf_drop_widget.status_label.setText(
+                    f"✓ Page {page_num} extracted from {Path(file_path).name}"
+                )
 
-                # Auto-detect actor type from extracted text
-                self._auto_detect_actor_type()
-
+                # Auto-detect removed — always threat
                 self._set_parse_status(
                     f"✓ PDF OCR complete — {len(text)} characters from page {page_num}", "ok"
                 )
@@ -430,7 +480,7 @@ class SingleImportTab(QWidget):
                 os.unlink(temp_image_path)
 
         except Exception as e:
-            self.pdf_label.setText(f"❌ Error: {str(e)}")
+            self.pdf_drop_widget.status_label.setText(f"❌ Error: {str(e)}")
             QMessageBox.critical(
                 self,
                 "PDF Error",
@@ -442,6 +492,7 @@ class SingleImportTab(QWidget):
         """Show dialog to select PDF page."""
         from PyQt6.QtWidgets import (
             QDialog,
+            QDialogButtonBox,
             QFormLayout,
             QSpinBox,
         )
@@ -456,10 +507,14 @@ class SingleImportTab(QWidget):
         spinbox.setValue(1)
         layout.addRow(f"Page (1-{total_pages}):", spinbox)
 
-        dialog.setLayout(layout)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addRow(buttons)
 
-        buttons = QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
-        dialog.setStandardButtons(buttons)
+        dialog.setLayout(layout)
 
         if dialog.exec() == QDialog.DialogCode.Accepted:
             return spinbox.value(), True
@@ -480,14 +535,9 @@ class SingleImportTab(QWidget):
             return
 
         try:
-            if self.actor_type == "threat":
-                parser = DangerParser()
-                actor, errors = parser.parse(text)
-                actor_label = "Danger"
-            else:
-                parser = CharacterParser()
-                actor, errors = parser.parse(text)
-                actor_label = "Character"
+            parser = DangerParser()
+            actor, errors = parser.parse(text)
+            actor_label = "Danger"
 
             if errors:
                 warn_summary = "; ".join(e.message for e in errors[:3])
@@ -500,7 +550,7 @@ class SingleImportTab(QWidget):
 
             # Store the parsed actor
             self.current_actor = actor
-            self.current_actor_type = self.actor_type
+            self.current_actor_type = "threat"
         except ParsingError as e:
             self._set_parse_status(f"❌ Parse failed: {e}", "error")
 
@@ -531,20 +581,6 @@ class SingleImportTab(QWidget):
                 f"✓ New danger '{self.current_actor.name}' ready — click Export to save.", "ok"
             )
 
-    def _new_character(self) -> None:
-        """Create a brand-new character from scratch."""
-        from ...com_schema import CharacterActor
-        from ..dialogs import EditActorDialog
-
-        actor = CharacterActor(name="New Character")
-        dialog = EditActorDialog(actor, self)
-        if dialog.exec():
-            self.current_actor = dialog.get_actor()
-            self.current_actor_type = "character"
-            self._set_parse_status(
-                f"✓ New character '{self.current_actor.name}' ready — click Export to save.", "ok"
-            )
-
     def _show_preview(self) -> None:
         """Show JSON preview of parsed actor."""
         if not hasattr(self, "current_actor") or not self.current_actor:
@@ -554,14 +590,9 @@ class SingleImportTab(QWidget):
         import json
 
         try:
-            if self.current_actor_type == "threat":
-                from ...danger_to_foundry import convert_danger_to_foundry
+            from ...danger_to_foundry import convert_danger_to_foundry
 
-                actor_json = convert_danger_to_foundry(self.current_actor)
-            else:
-                from ...character_to_foundry import convert_character_to_foundry
-
-                actor_json = convert_character_to_foundry(self.current_actor)
+            actor_json = convert_danger_to_foundry(self.current_actor)
 
             json_str = json.dumps(actor_json, indent=2)
 
@@ -583,16 +614,10 @@ class SingleImportTab(QWidget):
 
         try:
             # Convert to Foundry format
-            if self.current_actor_type == "threat":
-                from ...danger_to_foundry import convert_danger_to_foundry
+            from ...danger_to_foundry import convert_danger_to_foundry
 
-                actor_json = convert_danger_to_foundry(self.current_actor)
-                actor_label = "Danger"
-            else:
-                from ...character_to_foundry import convert_character_to_foundry
-
-                actor_json = convert_character_to_foundry(self.current_actor)
-                actor_label = "Character"
+            actor_json = convert_danger_to_foundry(self.current_actor)
+            actor_label = "Danger"
 
             # Export to file
             from ...foundry_export import FoundryJsonExporter
@@ -639,3 +664,7 @@ class SingleImportTab(QWidget):
     def set_history_callback(self, callback):
         """Set the callback for history updates."""
         self.history_callback = callback
+
+    def set_foundry_client(self, client) -> None:
+        """Receive the Foundry client from the config tab (currently unused by this tab)."""
+        self._foundry_client = client

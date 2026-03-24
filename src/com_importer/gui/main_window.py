@@ -57,9 +57,9 @@ class ComImporterWindow(QMainWindow):
         from .tabs.history_tab import HistoryTab
         from .tabs.single_import_tab import SingleImportTab
 
-        # Tab 1: Single Danger/Character Input
+        # Tab 1: Single Threat Input (text / image / PDF)
         self.single_import_tab = SingleImportTab()
-        self.tabs.addTab(self.single_import_tab, "Single Import")
+        self.tabs.addTab(self.single_import_tab, "Import Threat")
 
         # Tab 2: Batch Import
         self.batch_import_tab = BatchImportTab()
@@ -131,8 +131,10 @@ class ComImporterWindow(QMainWindow):
         self.single_import_tab._tesseract_path = config.get("tesseract_path")
         self.single_import_tab._vision_api_key = config.get("vision_api_key")
 
-        # Set up history callback so both tabs can save to history
+        # Set up history callback so all import tabs can save to history
         self.single_import_tab.set_history_callback(self.history_tab.add_entry_from_creation)
+        self.batch_import_tab.set_history_callback(self.history_tab.add_entry_from_creation)
+        self.character_builder_tab.set_history_callback(self.history_tab.add_entry_from_creation)
 
     def _show_preferences(self) -> None:
         """Show preferences dialog."""

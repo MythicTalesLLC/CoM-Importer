@@ -27,7 +27,11 @@ def _install_excepthook() -> None:
 def main() -> int:
     from PyQt6.QtWidgets import QApplication
 
-    from .gui.main_window import ComImporterWindow
+    try:
+        from .gui.main_window import ComImporterWindow
+    except ImportError:
+        # Frozen/script execution can lose package context for relative imports.
+        from com_importer.gui.main_window import ComImporterWindow
 
     _install_excepthook()
 

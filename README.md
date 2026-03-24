@@ -365,10 +365,20 @@ pip install -e ".[build]"
 # Build for your platform (auto-detected)
 bash scripts/build.sh
 
+# Force explicit target
+bash scripts/build.sh --mac
+bash scripts/build.sh --windows
+
+# Show wrapper options
+bash scripts/build.sh --help
+
 # Or build specifically
 bash scripts/build_mac.sh    # Creates dist/CoM-Importer.app
 bash scripts/build_windows.sh # Creates dist/com-importer.exe
 ```
+
+Build scripts prefer `./.venv/bin/python` automatically (then `$VIRTUAL_ENV/bin/python`, then `python3`).
+You can override with `PYTHON_BIN=/path/to/python`.
 
 See [PHASE6_PACKAGING.md](PHASE6_PACKAGING.md) for detailed build instructions, code signing, distribution, and CI/CD setup.
 

@@ -21,12 +21,10 @@ a = Analysis(
         'PyQt6.QtCore',
         'PyQt6.QtGui',
         'PyQt6.QtWidgets',
-        'PyQt6.QtSql',
         'com_importer.gui',
         'com_importer.gui.tabs',
         'com_importer.gui.dialogs',
         'pytesseract',
-        'cv2',
         'PIL',
         'pdf2image',
         'yaml',
@@ -76,7 +74,7 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name='CoM-Importer.app',
-    icon=None,
+    icon='assets/icons/com_importer.icns',
     bundle_identifier='com.mythic.com-importer',
     info_plist={
         'NSPrincipalClass': 'NSApplication',

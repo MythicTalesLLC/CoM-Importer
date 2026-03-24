@@ -166,15 +166,26 @@ class Tag:
 
     def to_foundry_item(self) -> dict[str, Any]:
         """Convert to Foundry item JSON format."""
+        # Map TagType to CoM4 category values
+        if self.category != TagCategory.NONE:
+            category_val = self.category.value
+        elif self.tag_type == TagType.POWER:
+            category_val = "ability"
+        elif self.tag_type == TagType.WEAKNESS:
+            category_val = "hindering"
+        else:
+            category_val = "none"
+
         return {
             "name": self.name,
             "type": "tag",
+            "img": "icons/svg/item-bag.svg",
             "system": {
                 "description": self.description,
                 "question": self.question,
                 "question_letter": self.question_letter,
                 "subtype": self.tag_type.value,
-                "category": self.category.value,
+                "category": category_val,
                 "burn_state": 0,
                 "burned": False,
                 "crispy": False,
@@ -184,7 +195,22 @@ class Tag:
                 "temporary": False,
                 "permanent": False,
                 "locked": False,
-                "version": "3.0.0",
+                "version": "1",
+                "parentId": None,
+                "subtagRequired": False,
+                "showcased": False,
+                "activated_loadout": False,
+                "sceneId": None,
+                "createdBy": [],
+                "example0": "",
+                "example1": "",
+                "example2": "",
+                "counterexample0": "",
+                "counterexample1": "",
+                "counterexample2": "",
+                "restriction0": "",
+                "restriction1": "",
+                "restriction2": "",
             },
         }
 
@@ -264,10 +290,14 @@ class DangerActor:
 
     def to_foundry_actor(self, actor_id: str | None = None) -> dict[str, Any]:
         """Convert to Foundry actor JSON format."""
-        import uuid
+        import random
+        import string
+
+        def _fid() -> str:
+            return "".join(random.choices(string.ascii_letters + string.digits, k=16))
 
         if actor_id is None:
-            actor_id = str(uuid.uuid4())
+            actor_id = _fid()
 
         # Build items array with all moves, spectrums, tags, statuses
         items: list[dict[str, Any]] = []
@@ -305,102 +335,6 @@ class DangerActor:
                 "name": self.name,
                 "displayName": 10,  # Hover
                 "actorLink": False,
-                "appendNumber": False,
-                "prependAdjective": False,
-                "texture": {
-                    "src": "icons/svg/mystery-man.svg",
-                },
-                "width": 1,
-                "height": 1,
-            },
-        }
-
-        return actor
-
-
-@dataclass
-class Theme:
-    """Represents an active theme on a player character."""
-
-    name: str  # "Mythos", "Logos", "Mist", or custom
-    description: str = ""
-    tags: list[Tag] = field(default_factory=list)
-    improvements: list[str] = field(default_factory=list)
-
-    def to_foundry_item(self) -> dict[str, Any]:
-        """Convert to Foundry themekit item JSON format."""
-        items: list[dict[str, Any]] = [tag.to_foundry_item() for tag in self.tags]
-        return {
-            "name": self.name,
-            "type": "themekit",
-            "items": items,
-            "system": {
-                "description": self.description,
-                "improvements": self.improvements,
-                "locked": False,
-                "version": "3.0.0",
-            },
-        }
-
-
-@dataclass
-class CharacterActor:
-    """Represents a player character actor in Foundry."""
-
-    name: str
-    pronouns: str = ""
-    description: str = ""
-    biography: str = ""
-    gmnotes: str = ""
-    locked: bool = False
-    themes: list[Theme] = field(default_factory=list)
-    juice_help: int = 0
-    juice_hurt: int = 0
-    crew_id: str | None = None
-
-    def validate(self) -> list[str]:
-        """Validate the character has required fields. Returns list of errors."""
-        errors = []
-        if not self.name or not self.name.strip():
-            errors.append("Character must have a name")
-        if not self.themes:
-            errors.append("Character should have at least one theme")
-        return errors
-
-    def to_foundry_actor(self, actor_id: str | None = None) -> dict[str, Any]:
-        """Convert to Foundry actor JSON format."""
-        import uuid
-
-        if actor_id is None:
-            actor_id = str(uuid.uuid4())
-
-        # Build items array with themes containing tags
-        items: list[dict[str, Any]] = [theme.to_foundry_item() for theme in self.themes]
-
-        # Build the actor document
-        actor = {
-            "_id": actor_id,
-            "name": self.name,
-            "type": "character",
-            "img": "icons/svg/mystery-man.svg",
-            "items": items,
-            "system": {
-                "biography": self.biography,
-                "description": self.description,
-                "gmnotes": self.gmnotes,
-                "pronouns": self.pronouns,
-                "locked": self.locked,
-                "crewThemes": [self.crew_id] if self.crew_id else [],
-                "juice": {
-                    "help": self.juice_help,
-                    "hurt": self.juice_hurt,
-                },
-                "version": "3.0.0",
-            },
-            "prototypeToken": {
-                "name": self.name,
-                "displayName": 10,  # Hover
-                "actorLink": True,  # PCs are usually linked to tokens
                 "appendNumber": False,
                 "prependAdjective": False,
                 "texture": {

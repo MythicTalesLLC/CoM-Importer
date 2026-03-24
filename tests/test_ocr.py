@@ -42,6 +42,25 @@ class TestTesseractOCR:
         finally:
             Path(temp_path).unlink(missing_ok=True)
 
+    def test_find_tesseract_common_paths_when_path_missing(self, monkeypatch):
+        """Packaged apps may not have Homebrew in PATH; common-path fallback should still work."""
+        monkeypatch.delenv("COM_IMPORTER_TESSERACT_PATH", raising=False)
+        monkeypatch.delenv("TESSERACT_PATH", raising=False)
+        monkeypatch.delenv("TESSERACT_CMD", raising=False)
+
+        monkeypatch.setattr("com_importer.image_parser.shutil.which", lambda *_: None)
+
+        real_is_file = Path.is_file
+
+        def fake_is_file(self):
+            if str(self) == "/opt/homebrew/bin/tesseract":
+                return True
+            return real_is_file(self)
+
+        monkeypatch.setattr(Path, "is_file", fake_is_file)
+
+        assert TesseractImageParser._find_tesseract() == "/opt/homebrew/bin/tesseract"
+
 
 class TestPDFHandler:
     """Test PDF extraction functionality."""

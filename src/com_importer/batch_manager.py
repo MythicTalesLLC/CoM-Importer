@@ -10,8 +10,6 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from .character_parser import CharacterParser
-from .character_to_foundry import convert_character_to_foundry
 from .danger_parser import DangerParser
 from .danger_to_foundry import convert_danger_to_foundry
 from .foundry_client import FoundryClient
@@ -82,30 +80,24 @@ class BatchImportManager:
         """
         self.foundry_client = foundry_client
         self.danger_parser = DangerParser()
-        self.character_parser = CharacterParser()
         self.created_actor_ids: list[str] = []
         self.report = BatchImportReport()
 
     def import_from_texts(
         self,
         texts: list[str],
-        actor_type: str = "threat",
         progress_callback: callable | None = None,
     ) -> BatchImportReport:
         """
-        Import multiple dangers or characters from text blocks.
+        Import multiple threats from text blocks.
 
         Args:
             texts: List of text strings to parse and import
-            actor_type: Type of actor to import ("threat" for dangers, "character" for PCs)
             progress_callback: Optional callback for progress (current index, total)
 
         Returns:
             BatchImportReport with details on each import
         """
-        if actor_type not in ("threat", "character"):
-            raise ValueError(f"Invalid actor_type: {actor_type}. Must be 'threat' or 'character'")
-
         self.report = BatchImportReport(
             total_attempted=len(texts),
             results=[],
@@ -116,7 +108,7 @@ class BatchImportManager:
             if progress_callback:
                 progress_callback(idx + 1, len(texts))
 
-            result = self._import_single_text(text, actor_type)
+            result = self._import_single_text(text)
             self.report.results.append(result)
 
             if result.status == "success":
@@ -128,30 +120,24 @@ class BatchImportManager:
         logger.info(f"Batch import complete: {self.report.summary()}")
         return self.report
 
-    def _import_single_text(self, text: str, actor_type: str = "threat") -> BatchImportResult:
+    def _import_single_text(self, text: str) -> BatchImportResult:
         """
-        Import a single actor (danger or character) from text.
+        Import a single threat from text.
 
         Args:
             text: Text to parse and import
-            actor_type: Type of actor ("threat" or "character")
 
         Returns:
             BatchImportResult with status and details
         """
-        result = BatchImportResult(input_text=text, actor_type=actor_type)
+        result = BatchImportResult(input_text=text, actor_type="threat")
 
         try:
             # Step 1: Parse
             result.status = "parsing"
-            if actor_type == "threat":
-                actor, errors = self.danger_parser.parse(text)
-                converter = convert_danger_to_foundry
-                actor_label = "danger"
-            else:
-                actor, errors = self.character_parser.parse(text)
-                converter = convert_character_to_foundry
-                actor_label = "character"
+            actor, errors = self.danger_parser.parse(text)
+            converter = convert_danger_to_foundry
+            actor_label = "danger"
 
             result.name = actor.name
 

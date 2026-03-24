@@ -1,0 +1,325 @@
+[
+  {
+    "name": "Adaptation",
+    "type": "themebook",
+    "img": "icons/svg/book.svg",
+    "system": {
+      "subtype": "mythos",
+      "mystery": "How am I changing?",
+      "power_tag_options": [],
+      "weakness_tag_options": [],
+      "version": "1"
+    },
+    "flags": {
+      "city-of-mist": {
+        "isThemeKit": true
+      }
+    }
+  },
+  {
+    "name": "Artifact",
+    "type": "themebook",
+    "img": "icons/svg/book.svg",
+    "system": {
+      "subtype": "mythos",
+      "mystery": "What is this thing?",
+      "power_tag_options": [],
+      "weakness_tag_options": [],
+      "version": "1"
+    },
+    "flags": {
+      "city-of-mist": {
+        "isThemeKit": true
+      }
+    }
+  },
+  {
+    "name": "Bastion",
+    "type": "themebook",
+    "img": "icons/svg/book.svg",
+    "system": {
+      "subtype": "mythos",
+      "mystery": "What am I protecting?",
+      "power_tag_options": [],
+      "weakness_tag_options": [],
+      "version": "1"
+    },
+    "flags": {
+      "city-of-mist": {
+        "isThemeKit": true
+      }
+    }
+  },
+  {
+    "name": "Divination",
+    "type": "themebook",
+    "img": "icons/svg/book.svg",
+    "system": {
+      "subtype": "mythos",
+      "mystery": "What do my visions show?",
+      "power_tag_options": [],
+      "weakness_tag_options": [],
+      "version": "1"
+    },
+    "flags": {
+      "city-of-mist": {
+        "isThemeKit": true
+      }
+    }
+  },
+  {
+    "name": "Embodiment",
+    "type": "themebook",
+    "img": "icons/svg/book.svg",
+    "system": {
+      "subtype": "mythos",
+      "mystery": "What myth do I embody?",
+      "power_tag_options": [],
+      "weakness_tag_options": [],
+      "version": "1"
+    },
+    "flags": {
+      "city-of-mist": {
+        "isThemeKit": true
+      }
+    }
+  },
+  {
+    "name": "Expression",
+    "type": "themebook",
+    "img": "icons/svg/book.svg",
+    "system": {
+      "subtype": "mythos",
+      "mystery": "What do I create?",
+      "power_tag_options": [],
+      "weakness_tag_options": [],
+      "version": "1"
+    },
+    "flags": {
+      "city-of-mist": {
+        "isThemeKit": true
+      }
+    }
+  },
+  {
+    "name": "Familiar",
+    "type": "themebook",
+    "img": "icons/svg/book.svg",
+    "system": {
+      "subtype": "mythos",
+      "mystery": "What is my bond?",
+      "power_tag_options": [],
+      "weakness_tag_options": [],
+      "version": "1"
+    },
+    "flags": {
+      "city-of-mist": {
+        "isThemeKit": true
+      }
+    }
+  },
+  {
+    "name": "Mobility",
+    "type": "themebook",
+    "img": "icons/svg/book.svg",
+    "system": {
+      "subtype": "mythos",
+      "mystery": "How do I move?",
+      "power_tag_options": [],
+      "weakness_tag_options": [],
+      "version": "1"
+    },
+    "flags": {
+      "city-of-mist": {
+        "isThemeKit": true
+      }
+    }
+  },
+  {
+    "name": "Omen",
+    "type": "themebook",
+    "img": "icons/svg/book.svg",
+    "system": {
+      "subtype": "mythos",
+      "mystery": "What do the signs say?",
+      "power_tag_options": [],
+      "weakness_tag_options": [],
+      "version": "1"
+    },
+    "flags": {
+      "city-of-mist": {
+        "isThemeKit": true
+      }
+    }
+  },
+  {
+    "name": "Relic",
+    "type": "themebook",
+    "img": "icons/svg/book.svg",
+    "system": {
+      "subtype": "mythos",
+      "mystery": "What power does it hold?",
+      "power_tag_options": [],
+      "weakness_tag_options": [],
+      "version": "1"
+    },
+    "flags": {
+      "city-of-mist": {
+        "isThemeKit": true
+      }
+    }
+  },
+  {
+    "name": "Subversion",
+    "type": "themebook",
+    "img": "icons/svg/book.svg",
+    "system": {
+      "subtype": "mythos",
+      "mystery": "What am I undermining?",
+      "power_tag_options": [],
+      "weakness_tag_options": [],
+      "version": "1"
+    },
+    "flags": {
+      "city-of-mist": {
+        "isThemeKit": true
+      }
+    }
+  },
+  {
+    "name": "Defining Event",
+    "type": "themebook",
+    "img": "icons/svg/book.svg",
+    "system": {
+      "subtype": "logos",
+      "mystery": "What event defined me?",
+      "power_tag_options": [],
+      "weakness_tag_options": [],
+      "version": "1"
+    },
+    "flags": {
+      "city-of-mist": {
+        "isThemeKit": true
+      }
+    }
+  },
+  {
+    "name": "Defining Relationship",
+    "type": "themebook",
+    "img": "icons/svg/book.svg",
+    "system": {
+      "subtype": "logos",
+      "mystery": "Who defines me?",
+      "power_tag_options": [],
+      "weakness_tag_options": [],
+      "version": "1"
+    },
+    "flags": {
+      "city-of-mist": {
+        "isThemeKit": true
+      }
+    }
+  },
+  {
+    "name": "Mission",
+    "type": "themebook",
+    "img": "icons/svg/book.svg",
+    "system": {
+      "subtype": "logos",
+      "mystery": "What is my mission?",
+      "power_tag_options": [],
+      "weakness_tag_options": [],
+      "version": "1"
+    },
+    "flags": {
+      "city-of-mist": {
+        "isThemeKit": true
+      }
+    }
+  },
+  {
+    "name": "Personality",
+    "type": "themebook",
+    "img": "icons/svg/book.svg",
+    "system": {
+      "subtype": "logos",
+      "mystery": "Who am I?",
+      "power_tag_options": [],
+      "weakness_tag_options": [],
+      "version": "1"
+    },
+    "flags": {
+      "city-of-mist": {
+        "isThemeKit": true
+      }
+    }
+  },
+  {
+    "name": "Possessions",
+    "type": "themebook",
+    "img": "icons/svg/book.svg",
+    "system": {
+      "subtype": "logos",
+      "mystery": "What do I own?",
+      "power_tag_options": [],
+      "weakness_tag_options": [],
+      "version": "1"
+    },
+    "flags": {
+      "city-of-mist": {
+        "isThemeKit": true
+      }
+    }
+  },
+  {
+    "name": "Routine",
+    "type": "themebook",
+    "img": "icons/svg/book.svg",
+    "system": {
+      "subtype": "logos",
+      "mystery": "What is my role in life?",
+      "power_tag_options": [],
+      "weakness_tag_options": [],
+      "version": "1"
+    },
+    "flags": {
+      "city-of-mist": {
+        "isThemeKit": true
+      }
+    }
+  },
+  {
+    "name": "Training",
+    "type": "themebook",
+    "img": "icons/svg/book.svg",
+    "system": {
+      "subtype": "logos",
+      "mystery": "What have I trained for?",
+      "power_tag_options": [],
+      "weakness_tag_options": [],
+      "version": "1"
+    },
+    "flags": {
+      "city-of-mist": {
+        "isThemeKit": true
+      }
+    }
+  },
+  {
+    "name": "Turf",
+    "type": "themebook",
+    "img": "icons/svg/book.svg",
+    "system": {
+      "subtype": "logos",
+      "mystery": "Where is my home ground?",
+      "power_tag_options": [],
+      "weakness_tag_options": [],
+      "version": "1"
+    },
+    "flags": {
+      "city-of-mist": {
+        "isThemeKit": true
+      }
+    }
+  }
+]

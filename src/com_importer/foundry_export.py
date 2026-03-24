@@ -60,10 +60,10 @@ class FoundryJsonExporter:
 
         logger.info(f"Exported actor to {filepath}")
 
-        # Optionally export macro script
+        # Optionally export macro script — choose correct macro for actor type
         if export_macro:
             macro_code = FoundryJsonExporter.create_import_script()
-            macro_filename = "IMPORT_MACRO_CityOfMist.js"
+            macro_filename = "IMPORT_MACRO_Threat_CityOfMist.js"
             macro_filepath = export_dir / macro_filename
 
             with open(macro_filepath, "w") as f:
@@ -109,14 +109,7 @@ class FoundryJsonExporter:
     @staticmethod
     def create_import_script() -> str:
         """
-        Generate a production-ready Foundry Macro for importing threat actors with items.
-
-        This macro:
-        1. Prompts user to paste JSON content or upload file
-        2. Creates the actor with all system data (description, mythos, logos, etc)
-        3. Automatically adds all items (moves, spectrums, tags, statuses)
-        4. Provides clear success/error feedback
-
+        Generate a Foundry Macro for importing threat actors with items.
         Returns:
             Foundry macro code as a string
         """

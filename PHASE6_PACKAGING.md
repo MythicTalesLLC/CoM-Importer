@@ -10,7 +10,7 @@ This directory contains all build configuration and scripts for creating standal
 - **com_importer_windows.spec** - PyInstaller specification for Windows .exe
 - **build_mac.sh** - Build script for macOS (creates CoM-Importer.app)
 - **build_windows.sh** - Build script for Windows (creates com-importer.exe)
-- **build.sh** - Cross-platform wrapper (auto-detects OS and runs appropriate builder)
+- **build.sh** - Cross-platform wrapper with explicit targets (`--auto`, `--mac`, `--windows`)
 
 ## Prerequisites
 
@@ -42,6 +42,9 @@ npm install -g create-dmg
 # Build is auto-detected on macOS
 bash scripts/build.sh
 
+# Force explicit target
+bash scripts/build.sh --mac
+
 # Or manually:
 bash scripts/build_mac.sh
 
@@ -57,6 +60,9 @@ Output: `dist/CoM-Importer.app`
 # Build is auto-detected on Windows
 bash scripts/build.sh
 
+# Force explicit target
+bash scripts/build.sh --windows
+
 # Or manually:
 bash scripts/build_windows.sh
 
@@ -68,6 +74,22 @@ bash scripts/build_windows.sh
 ```
 
 Output: `dist/com-importer.exe`
+
+### Build Script Options
+```bash
+bash scripts/build.sh --help
+
+# Common usage
+bash scripts/build.sh --auto
+bash scripts/build.sh --mac
+bash scripts/build.sh --windows
+```
+
+### Python Interpreter Selection
+- `build_mac.sh` and `build_windows.sh` prefer `./.venv/bin/python` when present
+- Otherwise they use `$VIRTUAL_ENV/bin/python` (if active)
+- Fallback is `python3` from `PATH`
+- You can override explicitly with `PYTHON_BIN=/path/to/python`
 
 ## Distribution
 

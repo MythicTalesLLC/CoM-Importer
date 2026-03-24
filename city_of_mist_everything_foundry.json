@@ -1,0 +1,129 @@
+[
+    {
+        "name": "ANIMAL SHAPESHIFTING",
+        "type": "theme",
+        "img": "icons/svg/book.svg",
+        "system": {
+            "type": "Adaptation",
+            "concept": "Is my true nature animal or human?",
+            "powerTags": [
+                {
+                    "name": "wear animal shapes",
+                    "selected": true
+                },
+                {
+                    "name": "grow natural weapons"
+                },
+                {
+                    "name": "true animal form (choose one)"
+                },
+                {
+                    "name": "stronger in the moonlight"
+                },
+                {
+                    "name": "shapeshift just one body part"
+                },
+                {
+                    "name": "thick animal hide"
+                },
+                {
+                    "name": "feral instincts"
+                },
+                {
+                    "name": "summon animal companions"
+                },
+                {
+                    "name": "stampede"
+                },
+                {
+                    "name": "grant animal form"
+                }
+            ],
+            "weaknessTags": [
+                {
+                    "name": "must protect nature"
+                },
+                {
+                    "name": "difficult to mimic a specific animal"
+                },
+                {
+                    "name": "a detectable magical aura"
+                },
+                {
+                    "name": "animalistic habits"
+                }
+            ],
+            "mystery": "Is my true nature animal or human?"
+        },
+        "flags": {
+            "city-of-mist": {
+                "isThemeKit": true,
+                "source": "Shadows & Showdowns"
+            }
+        }
+    },
+    {
+        "name": "CAPTIVATING BEAUTY",
+        "type": "theme",
+        "img": "icons/svg/book.svg",
+        "system": {
+            "type": "Subversion",
+            "concept": "Who would I be without my good looks?",
+            "powerTags": [
+                {
+                    "name": "Mesmerize others with my beauty",
+                    "selected": true
+                },
+                {
+                    "name": "strike a pose"
+                },
+                {
+                    "name": "draw the interest of the high and mighty"
+                },
+                {
+                    "name": "they beg to serve me"
+                },
+                {
+                    "name": "fan the flames of attraction"
+                },
+                {
+                    "name": "read body language"
+                },
+                {
+                    "name": "a helpful animal companion"
+                },
+                {
+                    "name": "see through superficial beauty"
+                },
+                {
+                    "name": "start a war over me"
+                },
+                {
+                    "name": "magically fix their attention on me"
+                }
+            ],
+            "weaknessTags": [
+                {
+                    "name": "the old and the wise"
+                },
+                {
+                    "name": "no real experience with love"
+                },
+                {
+                    "name": "possessive suitors"
+                },
+                {
+                    "name": "narcissist"
+                }
+            ],
+            "mystery": "Who would I be without my good looks?"
+        },
+        "flags": {
+            "city-of-mist": {
+                "isThemeKit": true,
+                "source": "Shadows & Showdowns"
+            }
+        }
+    }
+    // ... (the rest of the 35+ kits are in the full file your Python script creates)
+]

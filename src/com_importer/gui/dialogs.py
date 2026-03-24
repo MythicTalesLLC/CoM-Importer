@@ -28,9 +28,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from ..character_to_foundry import convert_character_to_foundry
 from ..com_schema import (
-    CharacterActor,
     DangerActor,
     DangerStatus,
     GMMove,
@@ -48,12 +46,11 @@ class EditActorDialog(QDialog):
 
     _MOVE_TYPES = ["soft", "hard", "custom", "choices"]
 
-    def __init__(self, actor: DangerActor | CharacterActor, parent=None):
+    def __init__(self, actor: DangerActor, parent=None):
         """Initialize edit dialog."""
         super().__init__(parent)
         self.actor = actor
-        self.is_character = isinstance(actor, CharacterActor)
-        self.setWindowTitle("Edit Character" if self.is_character else "Edit Danger")
+        self.setWindowTitle("Edit Danger")
         self.resize(1020, 720)
         self._focused_bio_edit: QTextEdit | None = None  # tracks which bio edit has focus
         self._create_ui()
@@ -67,15 +64,10 @@ class EditActorDialog(QDialog):
 
         tabs = QTabWidget()
         tabs.addTab(self._create_basic_tab(), "Basic Info")
-
-        if self.is_character:
-            tabs.addTab(self._create_character_tab(), "Character Details")
-        else:
-            tabs.addTab(self._create_danger_details_tab(), "Danger Details")
-            tabs.addTab(self._create_spectrums_tab(), "Spectrums")
-            tabs.addTab(self._create_moves_tab(), "GM Moves")
-            tabs.addTab(self._create_tags_statuses_tab(), "Tags & Statuses")
-
+        tabs.addTab(self._create_danger_details_tab(), "Danger Details")
+        tabs.addTab(self._create_spectrums_tab(), "Spectrums")
+        tabs.addTab(self._create_moves_tab(), "GM Moves")
+        tabs.addTab(self._create_tags_statuses_tab(), "Tags & Statuses")
         tabs.addTab(self._create_preview_tab(), "JSON Preview")
         layout.addWidget(tabs)
 
@@ -365,34 +357,6 @@ class EditActorDialog(QDialog):
 
         return widget
 
-    def _create_character_tab(self) -> QWidget:
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        character: CharacterActor = self.actor  # type: ignore[assignment]
-
-        layout.addWidget(QLabel("Pronouns (optional):"))
-        self.pronouns_input = QLineEdit(character.pronouns)
-        layout.addWidget(self.pronouns_input)
-
-        row = QHBoxLayout()
-        row.addWidget(QLabel("Juice – Help:"))
-        self.juice_help_input = QSpinBox()
-        self.juice_help_input.setRange(0, 9)
-        self.juice_help_input.setValue(character.juice_help)
-        row.addWidget(self.juice_help_input)
-        row.addSpacing(20)
-        row.addWidget(QLabel("Juice – Hurt:"))
-        self.juice_hurt_input = QSpinBox()
-        self.juice_hurt_input.setRange(0, 9)
-        self.juice_hurt_input.setValue(character.juice_hurt)
-        row.addWidget(self.juice_hurt_input)
-        row.addStretch()
-        layout.addLayout(row)
-
-        layout.addWidget(QLabel(f"Themes: {len(character.themes)} (edit in JSON Preview tab)"))
-        layout.addStretch()
-        return widget
-
     def _create_preview_tab(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
@@ -548,10 +512,7 @@ class EditActorDialog(QDialog):
             self.preview_text.setPlainText("Error reading fields — see log for details.")
             return
         try:
-            if self.is_character:
-                actor_json = convert_character_to_foundry(self.actor)
-            else:
-                actor_json = convert_danger_to_foundry(self.actor)
+            actor_json = convert_danger_to_foundry(self.actor)
             self.preview_text.setPlainText(json.dumps(actor_json, indent=2))
         except Exception as e:
             self.preview_text.setPlainText(f"Error generating JSON:\n{e}")
@@ -565,76 +526,70 @@ class EditActorDialog(QDialog):
         self.actor.biography = self._rich_text_value(self.biography_input)
         self.actor.gmnotes = self._rich_text_value(self.gmnotes_input)
 
-        if self.is_character:
-            ch: CharacterActor = self.actor  # type: ignore[assignment]
-            ch.pronouns = self.pronouns_input.text().strip()
-            ch.juice_help = self.juice_help_input.value()
-            ch.juice_hurt = self.juice_hurt_input.value()
-        else:
-            d: DangerActor = self.actor  # type: ignore[assignment]
-            d.danger_rating = self.rating_input.text().strip() or None
-            d.mythos = self.mythos_input.toPlainText().strip()
-            d.logos = self.logos_input.toPlainText().strip()
-            d.collective_note = self.collective_note_input.text().strip()
-            d.collective_size = self.collective_size_input.value()
-            d.is_mythos_power_set = self.mythos_power_set_check.isChecked()
+        d: DangerActor = self.actor  # type: ignore[assignment]
+        d.danger_rating = self.rating_input.text().strip() or None
+        d.mythos = self.mythos_input.toPlainText().strip()
+        d.logos = self.logos_input.toPlainText().strip()
+        d.collective_note = self.collective_note_input.text().strip()
+        d.collective_size = self.collective_size_input.value()
+        d.is_mythos_power_set = self.mythos_power_set_check.isChecked()
 
-            # Spectrums
-            d.spectrums = []
-            for row in range(self.spectrums_table.rowCount()):
-                name_item = self.spectrums_table.item(row, 0)
-                max_item = self.spectrums_table.item(row, 1)
-                if name_item and name_item.text().strip():
-                    raw_max = max_item.text().strip() if max_item else "4"
-                    max_tier: int | None = None if raw_max == "-" else int(raw_max or "4")
-                    d.spectrums.append(Spectrum(name=name_item.text().strip(), max_tier=max_tier))
+        # Spectrums
+        d.spectrums = []
+        for row in range(self.spectrums_table.rowCount()):
+            name_item = self.spectrums_table.item(row, 0)
+            max_item = self.spectrums_table.item(row, 1)
+            if name_item and name_item.text().strip():
+                raw_max = max_item.text().strip() if max_item else "4"
+                max_tier: int | None = None if raw_max == "-" else int(raw_max or "4")
+                d.spectrums.append(Spectrum(name=name_item.text().strip(), max_tier=max_tier))
 
-            # GM Moves
-            d.gm_moves = []
-            for row in range(self.moves_table.rowCount()):
-                name_item = self.moves_table.item(row, 0)
-                type_widget = self.moves_table.cellWidget(row, 1)
-                desc_item = self.moves_table.item(row, 2)
-                move_type_str = type_widget.currentText() if type_widget else "soft"
-                try:
-                    move_type = MoveType(move_type_str)
-                except ValueError:
-                    move_type = MoveType.SOFT
-                name = name_item.text().strip() if name_item else ""
-                desc = desc_item.text().strip() if desc_item else ""
-                # "choices" rows may have an empty name — only skip truly blank rows
-                if name or (move_type == MoveType.CHOICES and desc):
-                    d.gm_moves.append(
-                        GMMove(
-                            name=name,
-                            description=desc,
-                            move_type=move_type,
-                        )
+        # GM Moves
+        d.gm_moves = []
+        for row in range(self.moves_table.rowCount()):
+            name_item = self.moves_table.item(row, 0)
+            type_widget = self.moves_table.cellWidget(row, 1)
+            desc_item = self.moves_table.item(row, 2)
+            move_type_str = type_widget.currentText() if type_widget else "soft"
+            try:
+                move_type = MoveType(move_type_str)
+            except ValueError:
+                move_type = MoveType.SOFT
+            name = name_item.text().strip() if name_item else ""
+            desc = desc_item.text().strip() if desc_item else ""
+            # "choices" rows may have an empty name — only skip truly blank rows
+            if name or (move_type == MoveType.CHOICES and desc):
+                d.gm_moves.append(
+                    GMMove(
+                        name=name,
+                        description=desc,
+                        move_type=move_type,
                     )
+                )
 
-            # Tags
-            d.tags = []
-            for row in range(self.tags_table.rowCount()):
-                name_item = self.tags_table.item(row, 0)
-                type_item = self.tags_table.item(row, 1)
-                if name_item and name_item.text().strip():
-                    from ..com_schema import TagType
+        # Tags
+        d.tags = []
+        for row in range(self.tags_table.rowCount()):
+            name_item = self.tags_table.item(row, 0)
+            type_item = self.tags_table.item(row, 1)
+            if name_item and name_item.text().strip():
+                from ..com_schema import TagType
 
-                    tag_type_str = type_item.text().strip() if type_item else "story"
-                    try:
-                        tag_type = TagType(tag_type_str)
-                    except ValueError:
-                        tag_type = TagType.STORY
-                    d.tags.append(Tag(name=name_item.text().strip(), tag_type=tag_type))
+                tag_type_str = type_item.text().strip() if type_item else "story"
+                try:
+                    tag_type = TagType(tag_type_str)
+                except ValueError:
+                    tag_type = TagType.STORY
+                d.tags.append(Tag(name=name_item.text().strip(), tag_type=tag_type))
 
-            # Statuses
-            d.statuses = []
-            for row in range(self.statuses_table.rowCount()):
-                name_item = self.statuses_table.item(row, 0)
-                tier_item = self.statuses_table.item(row, 1)
-                if name_item and name_item.text().strip():
-                    tier = int(tier_item.text().strip() or "0") if tier_item else 0
-                    d.statuses.append(DangerStatus(name=name_item.text().strip(), tier=tier))
+        # Statuses
+        d.statuses = []
+        for row in range(self.statuses_table.rowCount()):
+            name_item = self.statuses_table.item(row, 0)
+            tier_item = self.statuses_table.item(row, 1)
+            if name_item and name_item.text().strip():
+                tier = int(tier_item.text().strip() or "0") if tier_item else 0
+                d.statuses.append(DangerStatus(name=name_item.text().strip(), tier=tier))
 
     def _on_save(self) -> None:
         try:
@@ -659,7 +614,7 @@ class EditActorDialog(QDialog):
             logger.exception("Error saving actor")
             QMessageBox.critical(self, "Save Error", "An unexpected error occurred while saving.")
 
-    def get_actor(self) -> DangerActor | CharacterActor:
+    def get_actor(self) -> DangerActor:
         """Return the (possibly edited) actor."""
         return self.actor
 

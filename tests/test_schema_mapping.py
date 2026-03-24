@@ -84,6 +84,27 @@ class TestSpectrumParsing:
         assert d.spectrums == []
         assert d.is_mythos_power_set is True
 
+    def test_three_spectrums_with_variable_x(self):
+        """Heist Team: 3-segment line where first value is X (variable tier)."""
+        text = (
+            "HEIST TEAM ★★★+\n"
+            "Complex criminal operations require a team of professionals.\n"
+            "DISBAND X / HURT OR SUBDUE 3 / TURN 5\n"
+            "• Team: The Heist Team disband spectrum has a maximum equal to"
+            " the number of team members minus one.\n"
+        )
+        d, _ = self.parser.parse(text)
+        names = {s.name for s in d.spectrums}
+        assert "DISBAND" in names, f"Expected DISBAND in {names}"
+        assert "HURT OR SUBDUE" in names, f"Expected HURT OR SUBDUE in {names}"
+        assert "TURN" in names, f"Expected TURN in {names}"
+        dis = next(s for s in d.spectrums if s.name == "DISBAND")
+        assert dis.max_tier is None, "DISBAND X should map to max_tier=None (variable)"
+        hos = next(s for s in d.spectrums if s.name == "HURT OR SUBDUE")
+        assert hos.max_tier == 3
+        turn = next(s for s in d.spectrums if s.name == "TURN")
+        assert turn.max_tier == 5
+
 
 class TestCollectiveExtraction:
     """Test Collective/Vehicle/Team note extraction."""

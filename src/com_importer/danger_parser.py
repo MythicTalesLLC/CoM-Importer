@@ -361,9 +361,13 @@ class DangerParser:
 
     # --- Spectrum helpers ---------------------------------------------------
 
-    # Matches all-caps spectrum line: "HURT OR SUBDUE 3 / GET INTO TROUBLE 4"
+    # Matches 1+ slash-separated ALL-CAPS name+value pairs.
+    # Value may be digits, "X" (variable tier, e.g. Heist Team disband), or "-" (immune).
+    # Handles 2 or 3 spectrums per line, e.g.:
+    #   "DISBAND X / HURT OR SUBDUE 3 / TURN 5"
+    #   "HURT OR SUBDUE 3 / GET INTO TROUBLE 4"
     _SPECTRUM_ALLCAPS_RE = re.compile(
-        r"^([A-Z][A-Z\s]+?)\s+([0-9]+|-)\s*(?:/\s*([A-Z][A-Z\s]+?)\s+([0-9]+|-))?$"
+        r"^[A-Z][A-Z\s]+?\s+(?:[0-9X]+|-)(?:\s*/\s*[A-Z][A-Z\s]+?\s+(?:[0-9X]+|-))*$"
     )
     # Space-separated pairs WITHOUT slash: "CORRUPT 3 BRIBE -"
     _SPECTRUM_SPACE_PAIRS_RE = re.compile(
@@ -453,7 +457,8 @@ class DangerParser:
             name = name.strip()
             if not name or len(name) > 60:
                 continue
-            if raw_val == "-" or not raw_val:
+            if raw_val == "-" or not raw_val or raw_val.upper() == "X":
+                # "-" = immune/unlimited; "X" = variable tier (e.g. Heist Team disband)
                 max_tier = None
             else:
                 corrected = self._correct_ocr_digit(raw_val)
@@ -489,8 +494,8 @@ class DangerParser:
             if not seg:
                 continue
             # Each segment: one or more ALL_CAPS words followed by a value token
-            # Value token: digits, OCR-digit chars, or "-"
-            m = re.match(r"^([A-Z][A-Z\s]+?)\s+([0-9SOIlZB]+|-)$", seg)
+            # Value token: digits, OCR-digit chars, "X" (variable), or "-"
+            m = re.match(r"^([A-Z][A-Z\s]+?)\s+([0-9SOIlZBX]+|-)$", seg)
             if m:
                 parts.append((m.group(1).strip(), m.group(2).strip()))
             else:
@@ -519,7 +524,7 @@ class DangerParser:
                     # Next token should be the value
                     if name_tokens and i < len(tokens):
                         val = tokens[i]
-                        if re.match(r"^[0-9SOIlZB]+$", val) or val == "-":
+                        if re.match(r"^[0-9SOIlZBX]+$", val) or val == "-":
                             parts.append((" ".join(name_tokens), val))
                             i += 1
                     else:

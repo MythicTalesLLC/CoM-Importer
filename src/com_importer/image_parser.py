@@ -7,6 +7,8 @@ Supports Tesseract (local, offline) and Google Cloud Vision (cloud, high accurac
 from __future__ import annotations
 
 import logging
+import os
+import shutil
 import subprocess
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -54,18 +56,27 @@ class TesseractImageParser(ImageOCRParser):
 
     @staticmethod
     def _find_tesseract() -> str | None:
-        """Find tesseract in system PATH."""
-        try:
-            result = subprocess.run(
-                ["which", "tesseract"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            if result.returncode == 0:
-                return result.stdout.strip()
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            pass
+        """Find tesseract using env override, PATH lookup, and common install paths."""
+        # Allow explicit override for packaged-app environments with restricted PATH.
+        for env_var in ("COM_IMPORTER_TESSERACT_PATH", "TESSERACT_PATH", "TESSERACT_CMD"):
+            candidate = os.environ.get(env_var)
+            if candidate and Path(candidate).is_file():
+                return candidate
+
+        which_path = shutil.which("tesseract")
+        if which_path:
+            return which_path
+
+        # Common install locations on macOS and Linux.
+        for path in (
+            "/opt/homebrew/bin/tesseract",
+            "/usr/local/bin/tesseract",
+            "/opt/local/bin/tesseract",
+            "/usr/bin/tesseract",
+        ):
+            if Path(path).is_file():
+                return path
+
         return None
 
     def parse_image(self, image_path: str | Path) -> str:
@@ -95,14 +106,22 @@ class TesseractImageParser(ImageOCRParser):
             # Preprocess image for better OCR
             preprocessed = self._preprocess_image(image_path)
 
-            # Use pytesseract if available, otherwise call tesseract directly
+            # Use pytesseract if available, otherwise call tesseract directly.
+            # Point pytesseract at the discovered binary to avoid PATH issues in app bundles.
             try:
                 import pytesseract
 
+                pytesseract.pytesseract.tesseract_cmd = self.tesseract_path
                 text = pytesseract.image_to_string(preprocessed)
             except ImportError:
                 # Fall back to subprocess
                 text = self._tesseract_subprocess(preprocessed)
+            except (OSError, RuntimeError) as e:
+                msg = str(e).lower()
+                if "tesseract is not installed" in msg or "not found" in msg:
+                    text = self._tesseract_subprocess(preprocessed)
+                else:
+                    raise
 
             return text.strip()
 
