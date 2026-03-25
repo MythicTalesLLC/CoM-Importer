@@ -26,6 +26,8 @@ from ...foundry_client import FoundryClientFactory
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_WORLD_NAME = "city-of-mist-ii"
+
 
 class ConfigurationTab(QWidget):
     """Tab for configuring Foundry connection and OCR settings."""
@@ -109,7 +111,7 @@ class ConfigurationTab(QWidget):
         remote_layout.addRow("Client ID:", self.client_id_input)
 
         self.world_name_input = QLineEdit()
-        self.world_name_input.setText(self.config.get("world_name", "city-of-mist"))
+        self.world_name_input.setText(self.config.get("world_name", DEFAULT_WORLD_NAME))
         remote_layout.addRow("World Name:", self.world_name_input)
 
         self.remote_group.setLayout(remote_layout)
@@ -129,7 +131,7 @@ class ConfigurationTab(QWidget):
         local_layout.addRow("Foundry Data Dir:", local_button_layout)
 
         self.local_world_input = QLineEdit()
-        self.local_world_input.setText(self.config.get("local_world_name", "city-of-mist"))
+        self.local_world_input.setText(self.config.get("local_world_name", DEFAULT_WORLD_NAME))
         local_layout.addRow("World Name:", self.local_world_input)
 
         self.local_group.setLayout(local_layout)

@@ -21,6 +21,9 @@
 // ============================================================================
 
 (async () => {
+    const LEGACY_SYSTEM_ID = "city-of-mist";
+    const TARGET_SYSTEM_ID = "city-of-mist-ii";
+
     // ── 1. Build compendium options ──────────────────────────────────────────
     const itemPacks = game.packs.filter(p => p.metadata.type === "Item");
     if (!itemPacks.length) {
@@ -266,7 +269,9 @@
         const checkedTypes = new Set(
             [...html[0].querySelectorAll(".com-type-cb:checked")].map(cb => cb.value)
         );
-        const items = allItems.filter(i => checkedTypes.has(i?.type));
+        const items = allItems
+            .map(item => normalizeLegacySystemData(item))
+            .filter(i => checkedTypes.has(i?.type));
 
         const ignored = allItems.length - items.length;
         const typeCount = {};
@@ -290,5 +295,26 @@
     function _setErr(html, msg) {
         const el = html[0].querySelector("#com-bulk-err");
         if (el) el.textContent = msg;
+    }
+
+    function normalizeLegacySystemData(value) {
+        if (Array.isArray(value)) {
+            return value.map(entry => normalizeLegacySystemData(entry));
+        }
+
+        if (value && typeof value === "object") {
+            return Object.fromEntries(
+                Object.entries(value).map(([key, entryValue]) => {
+                    const normalizedKey = key === LEGACY_SYSTEM_ID ? TARGET_SYSTEM_ID : key;
+                    return [normalizedKey, normalizeLegacySystemData(entryValue)];
+                })
+            );
+        }
+
+        if (value === LEGACY_SYSTEM_ID) {
+            return TARGET_SYSTEM_ID;
+        }
+
+        return value;
     }
 })();

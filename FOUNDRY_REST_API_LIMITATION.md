@@ -150,5 +150,5 @@ This is why the macro is recommended - it handles the items that the import dial
 
 - Foundry REST API Relay: https://github.com/ThreeHats/foundryvtt-rest-api-relay
 - Foundry Macro Documentation: https://foundryvtt.com/article/macros/
-- City of Mist Foundry Module: https://github.com/taragnor/city-of-mist
+- City of Mist II Foundry System: https://github.com/MythicTalesLLC/city-of-mist-custom
 - City of Mist Official: https://www.cityofmistrpg.com/

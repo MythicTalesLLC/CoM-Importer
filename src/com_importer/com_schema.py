@@ -4,7 +4,7 @@ City of Mist Foundry VTT schema definitions.
 Defines the data structures for dangers (threats), GM moves, spectrums, tags, and statuses
 that align with the City of Mist Foundry module schema.
 
-Reference: https://github.com/taragnor/city-of-mist
+Reference: https://github.com/MythicTalesLLC/city-of-mist-custom
 """
 
 from __future__ import annotations

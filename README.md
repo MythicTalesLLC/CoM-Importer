@@ -1,6 +1,6 @@
 # City of Mist Foundry Importer
 
-A powerful GUI tool for converting text, images, and PDFs from City of Mist rulebooks into properly formatted actors for Foundry VTT with the [City of Mist module](https://github.com/taragnor/city-of-mist).
+A powerful GUI tool for converting text, images, and PDFs from City of Mist rulebooks into properly formatted actors for Foundry VTT with [City of Mist II](https://github.com/MythicTalesLLC/city-of-mist-custom).
 
 **Transform rulebook content into game-ready Foundry actors in minutes** — supports both player characters and dangers/threats with full OCR capabilities.
 
@@ -303,7 +303,7 @@ FoundryClientFactory.create_rest_client(
 ```python
 FoundryClientFactory.create_local_client(
     foundry_data_dir="/path/to/foundry/Data",
-    world_name="city-of-mist"
+   world_name="city-of-mist-ii"
 )
 ```
 
@@ -430,7 +430,7 @@ This project is licensed under the MIT License — see LICENSE file for details.
 
 - [City of Mist on Modiphius.net](https://www.modiphius.net/products/city-of-mist-roleplaying-game)
 - [Foundry VTT Official Site](https://foundryvtt.com/)
-- [City of Mist Foundry Module](https://github.com/taragnor/city-of-mist)
+- [City of Mist II Foundry System](https://github.com/MythicTalesLLC/city-of-mist-custom)
 - [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki)
 - [Google Cloud Vision API](https://cloud.google.com/vision)
 

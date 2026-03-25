@@ -343,7 +343,7 @@ client = FoundryClientFactory.create_rest_client(
     api_url="https://foundryvtt-rest-api-relay.fly.dev",
     api_key="...",
     client_id="...",
-    world_name="city-of-mist"
+    world_name="city-of-mist-ii"
 )
 actor_id = client.create_actor(actor_json)
 ```
@@ -383,6 +383,6 @@ actor_id = client.create_actor(actor_json)
 
 ## 🔗 Resources
 
-- **City of Mist Foundry Module:** https://github.com/taragnor/city-of-mist
+- **City of Mist II Foundry System:** https://github.com/MythicTalesLLC/city-of-mist-custom
 - **Foundry REST API:** https://foundryvtt-rest-api-relay.fly.dev
 - **Rulebooks:** MC Toolkit, Player's Guide (in Gaming Share folder)
